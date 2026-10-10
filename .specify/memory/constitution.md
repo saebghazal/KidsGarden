@@ -1,0 +1,257 @@
+<!--
+Sync Impact Report
+==================
+Version change: 1.0.0 → 2.0.0
+Bump rationale: MAJOR redefinition of timed-only enjoyable use to recognize two explicit
+authorizations: untimed Parent Mode and timed Child Play Session. Also remove the debug-log
+allowance to match the approved V1 no-logs rule. Dull-by-default and privacy remain mandatory.
+
+Modified principles (titles unchanged):
+- I. Unauthorized = Dull Phone (Fail-Safe Default): two authorization forms, explicit PIN/action,
+  parent revocation, child timer/call-pause invariants, and safe restart behavior.
+- II. No Confrontation, Gradual Transitions: distinguish normal child expiry from immediate
+  authorization revocation; preserve quiet, non-confrontational behavior.
+- III. Privacy by Absence: prohibit app-created logs in both debug and release V1.
+- IV. Central, Testable State Machine: include both authorization forms and scoped call pauses.
+- V. Honest Android Platform Compliance: make best-effort dulling and scoped call limits explicit.
+Other amended sections:
+- Technical Constraints and V1 Scope: list Parent Mode and Child Play Session separately.
+- Development Workflow and Quality Gates: explicit authorization/timer tests and no-log review.
+Added sections: none
+Removed sections: none
+
+Template resolution: constitution-template resolved successfully through the shared resolver.
+Existing seven-principle structure and heading hierarchy retained; template sources unchanged.
+Write scope: .specify/memory/constitution.md only.
+Dependent templates and commands read the constitution at runtime and are not modified here.
+Follow-up completed: feature spec/plan references were synchronized to constitution v2.0.0 while
+remediating the remaining analysis findings; approved product scope is unchanged.
+
+Deferred placeholder TODOs: none.
+This report is temporary amendment-review material; remove it before committing the constitution
+after the existing maintainer review requirement is satisfied.
+-->
+
+# Kids Garden Constitution
+
+## Core Principles
+
+### I. Unauthorized = Dull Phone (Fail-Safe Default)
+
+- Dull Mode MUST be the default. No active, valid Kids Garden authorization MUST mean Dull Mode.
+  A normal device unlock, app launch, or successful PIN entry alone MUST NOT grant normal use.
+- Enjoyable use MUST be allowed only through one of two explicit Kids Garden authorizations:
+  untimed Parent Mode for the parent or a timed Child Play Session for the child. Each new grant
+  MUST require the Kids Garden PIN followed by the corresponding explicit parent action.
+- Parent Mode MUST begin only after the parent enters the Kids Garden PIN and chooses
+  “Use phone as parent.” It MUST provide normal or near-normal phone use with no time limit.
+- Parent Mode MUST end when the phone locks, the screen turns off, the parent exits, app state
+  becomes invalid, or the owning app process restarts unexpectedly. After lock/unlock, the phone
+  MUST remain in Dull Mode until the parent enters the Kids Garden PIN again and explicitly
+  starts a new authorization. Unlock alone MUST NOT restore Parent Mode.
+- A Child Play Session MUST begin only after the parent enters the Kids Garden PIN, chooses
+  “Give phone to child,” and selects a limited duration. The session MUST have a timer.
+- Lock/unlock MUST NOT reset, pause, extend, or bypass the child timer. A scoped detectable-call
+  pause is the only automatic pause: normal mobile/Telecom calls where Android APIs permit and
+  best-effort WhatsApp calls pause the timer only while a supported active call is detectable.
+  Unsupported or undetectable calls MUST leave countdown running. A call pause MUST preserve the
+  remaining time without duplicate credit; when no supported active call remains detectable,
+  countdown MUST resume from that remainder. Lock/unlock alone MUST NOT alter a valid call pause.
+- Near normal child-session expiry, Soft Landing MUST begin. At expiry, after accounting for
+  validated pauses, the phone MUST return to Dull Mode. Calls MUST NOT revive expired or revoked
+  authorizations or create an unlimited-play loophole. A new grant requires a new PIN/action.
+- The app MUST fail safe into Dull Mode when settings are missing, unreadable, corrupt, from an
+  unknown schema version that cannot be migrated, or when the stored session state is invalid or
+  cannot be validated (for example, an inconsistent deadline or clock).
+- Process death, app updates, and device reboots MUST NOT extend, restore, or create authorization.
+  V1 MUST discard all active grants and current child-session timestamps on owning-process
+  restart, update, or reboot. Valid parent settings MUST be loaded and re-validated; persisted
+  mode or session data MUST NOT authorize normal use. Healthy UI recreation alone is not a
+  process restart.
+
+Rationale: the product's core promise is that entertainment is something a parent grants, not
+something the child keeps by default or regains through errors.
+
+### II. No Confrontation, Gradual Transitions
+
+- The child-facing experience MUST NOT contain blocking messages, punishment screens, warnings,
+  countdown threats, scary alerts, or adversarial language ("blocked", "denied", "violation",
+  "caught", and similar).
+- Normal Child Play Session expiry MUST be gradual and quiet (Soft Landing): internet
+  responsiveness degrades over time rather than switching off abruptly. Parent Mode exit and
+  invalid/revoked authorization MUST return immediately to Dull Mode without child-facing
+  confrontation; Soft Landing MUST NOT extend a revoked grant.
+- Any notification required by Android (for example, a foreground service or VPN notification)
+  MUST use calm, neutral wording and MUST NOT address or scold the child.
+- Problems (missing permission, VPN failure, throttling not active) MUST be explained only in the
+  PIN-protected parent interface, never surfaced to the child as a confrontation.
+- Dull Mode MUST make entertainment less attractive, mainly by reducing internet responsiveness and
+  bandwidth through a local VPN-style approach. It MUST NOT lock the device or prevent use of
+  essential functions such as phone calls and emergency services.
+
+Rationale: confrontation between a child and software creates conflict, workarounds, and distrust;
+a dull phone that quietly stays dull avoids all three.
+
+### III. Privacy by Absence
+
+- The app MUST NOT collect, read, store, or transmit browsing content, URLs, DNS queries, video
+  titles, messages, notifications, screenshots, screen contents, keystrokes, search queries, contact
+  data, location, or any other private content.
+- Network handling in the local VPN MUST be limited to shaping rate and latency. It MUST NOT
+  inspect application-layer payloads, and it MUST NOT persist any record of traffic, destinations,
+  or apps used.
+- V1 persists only (a) parent settings and (b) the current session state. Activity logs, history,
+  and usage reports are prohibited in V1.
+- V1 MUST NOT create logs in debug or release builds, including Logcat diagnostics, crash logs,
+  PIN-attempt logs, network logs, call logs, or activity logs. Debug builds MUST NOT weaken this
+  rule. External test tooling may retain synthetic test results outside the installed product;
+  it MUST NOT collect real child content or usage history.
+- The Parent PIN MUST NOT be stored in plain text. Store a salted hash only.
+- No hidden surveillance: every capability the app uses MUST be visible to and explained to the
+  parent.
+
+Rationale: the safest data is data that never exists. Parents can trust the app because it cannot
+leak what it never collected.
+
+### IV. Central, Testable State Machine
+
+- Authorization behavior (Dull → Parent Mode → Dull and Dull → Child Play Session → Soft Landing
+  → Dull), including scoped call pauses and revocation, MUST be modeled as one explicit state
+  machine in the domain layer, written in pure Kotlin with no Android framework dependencies.
+- Time MUST be injected (for example, through a clock abstraction) so that expiry, Soft Landing
+  steps, and invalid-clock handling can be unit tested deterministically.
+- Every state, transition, and fail-safe rule MUST have unit tests. A change to the state machine
+  without matching tests MUST NOT be merged.
+- Platform components (VPN service, alarms, boot receiver, UI) MUST react to state machine output.
+  They MUST NOT implement their own session logic.
+
+Rationale: the state machine is the product. Keeping it central and pure makes it verifiable and
+keeps the fail-safe guarantees in Principle I enforceable.
+
+### V. Honest Android Platform Compliance
+
+- The app MUST comply with Android 15 and Android 16 rules for background execution, foreground
+  services (including declared service types), `VpnService`, notifications, exact alarms, and
+  runtime permissions. It MUST NOT use workarounds that rely on undocumented behavior.
+- Background behavior MUST be event and rule driven (system alarms, scheduled work, boot and package
+  broadcasts, VPN lifecycle callbacks). Continuous polling, AI, and screen analysis are prohibited.
+- Every sensitive permission or special access (VPN consent, notification permission, battery
+  optimization exemption, exact alarms, and similar) MUST have a clear, plain-language,
+  parent-facing explanation shown before the system prompt.
+- V1 is a normal installed app. It MUST NOT claim or advertise uninstall prevention, tamper-proofing,
+  or protection it cannot reliably enforce. The parent interface MUST honestly describe V1 limits.
+- Network dulling MUST be described as best-effort. V1 MUST NOT promise full OS control, guaranteed
+  dulling of cached/offline content, or continuous protection after force-stop, uninstall, or VPN
+  revocation. Scoped call detection MUST NOT be represented as universal call detection.
+- Strong tamper protection (Device Owner / DPC mode) is out of scope for V1 and reserved for V2.
+
+Rationale: platform-compliant apps keep working across OS updates and Play policy reviews.
+Overpromising protection misleads parents.
+
+### VI. Local-Only and Free
+
+- No backend, remote server, cloud sync, or account system. Authentication is the local Parent PIN
+  only.
+- No database. Settings and session state are stored with Jetpack DataStore using a JSON serializer
+  (kotlinx.serialization), accessed only through a settings repository in the data layer.
+- No analytics, crash-reporting SDKs that transmit data, advertising SDKs, or tracking of any kind.
+- The app is entirely free: no in-app purchases, subscriptions, or ads.
+- The app MUST NOT request the network for its own purposes. The VPN only shapes traffic the device
+  already produces.
+
+Rationale: a parental tool with no server has no server-side breach, cost, or data-retention risk.
+
+### VII. Simplicity and Battery Efficiency
+
+- Prefer the simplest design that satisfies the spec (YAGNI). New dependencies, modules, or
+  abstractions MUST be justified in the plan's Complexity Tracking.
+- The codebase MUST stay small and conventional enough for a small team working with Claude Code
+  and Codex: standard Android project layout, idiomatic Kotlin, and clear layer boundaries.
+- Battery use MUST be minimized: no wake loops, no busy timers, and the VPN packet path MUST be
+  lightweight. Work is scheduled only when a state transition requires it.
+
+Rationale: simple code is easier to verify, easier for AI agents to change safely, and cheaper on
+the device's battery.
+
+## Technical Constraints and V1 Scope
+
+**Platform and tooling**
+
+- Android phones only. `minSdk` 35 (Android 15), `targetSdk` 36 (Android 16).
+- Language: Kotlin. UI: Jetpack Compose. IDE: Android Studio. Build: Gradle with the Kotlin DSL.
+- Architecture layers: `ui` (Compose screens and ViewModels), `domain` (state machine, use cases,
+  pure Kotlin), `data` (settings repository over DataStore JSON), and `platform` (VPN service,
+  alarms or scheduling, boot receiver, permission helpers). Dependencies point inward toward
+  `domain`.
+
+**Settings schema**
+
+- The JSON settings document MUST carry an explicit `schemaVersion` field.
+- Each schema change MUST bump `schemaVersion` and ship a migration from every previously released
+  version, with a unit test for each migration.
+- Unknown, newer, or unmigratable versions MUST resolve to Dull Mode (Principle I) and be reported
+  in the parent interface.
+
+**V1 scope (in)**
+
+- Parent PIN setup and verification.
+- Explicit PIN-authorized “Use phone as parent” for untimed Parent Mode, ending on lock,
+  screen off, parent exit, invalid state, or owning-process restart.
+- Explicit PIN-authorized “Give phone to child” for a timed Child Play Session of a selected
+  duration, with scoped detectable-call pauses and no lock/unlock timer bypass.
+- Dull Mode without valid authorization; Soft Landing near normal child expiry, then Dull Mode.
+- Local VPN-based throttling of internet responsiveness and bandwidth.
+- Parent-only status screen that reports permission or VPN problems.
+
+**V1 scope (out)**
+
+- Device Owner / DPC mode, factory-reset provisioning, uninstall prevention.
+- Schedules, automatic sessions, remote control, multi-device management.
+- Logs, history, usage reports, content filtering by category or content.
+
+**Distribution**
+
+- V1: private APK / sideload or a Play internal testing track. A future free public release is
+  possible and MUST NOT require architectural changes to the privacy guarantees.
+
+## Development Workflow and Quality Gates
+
+- Work follows the Spec Kit flow: specify → (clarify) → plan → tasks → implement. Every plan MUST
+  pass the Constitution Check against Principles I–VII before implementation.
+- Every feature MUST be testable and ship with tests:
+  - Unit tests for all state machine states, transitions, and fail-safe rules (mandatory).
+  - Unit tests for both explicit authorization forms, Parent Mode revocation, child lock/unlock
+    invariance, scoped call pause/resume, unsupported-call countdown, and restart invalidation.
+  - Unit tests for settings serialization, defaults, corruption handling, and every schema
+    migration.
+  - Instrumented or manual test steps for platform behavior that cannot be unit tested (VPN
+    consent, reboot recovery, foreground service behavior), recorded in the feature's tasks.
+- Review checklist for every change (human or AI-authored):
+  - Does any path leave the device unrestricted without parent authorization? (Principle I)
+  - Does any child-facing text or UI confront the child? (Principle II)
+  - Is any private content read, stored, logged, or transmitted? (Principle III)
+  - Does either a debug or release path create app logs? (Principle III)
+  - Is session logic outside the state machine? (Principle IV)
+  - Are new permissions explained to the parent and compliant with Android 15/16? (Principle V)
+  - Was any network, analytics, or database dependency added? (Principle VI)
+  - Is added complexity justified, and is battery impact acceptable? (Principle VII)
+- Claude Code and Codex follow the same rules as human contributors. AI-generated changes MUST
+  pass the same tests and review checklist before merge.
+
+## Governance
+
+- This constitution supersedes all other project practices, guides, and agent instructions. When a
+  conflict exists, the constitution wins until amended.
+- Amendments are made through `/speckit-constitution`, MUST include a Sync Impact Report, and MUST
+  be reviewed by a project maintainer before they are committed.
+- Versioning follows semantic versioning:
+  - MAJOR: removal or backward-incompatible redefinition of a principle or governance rule.
+  - MINOR: a new principle or section, or materially expanded guidance.
+  - PATCH: clarifications, wording, and typo fixes with no semantic change.
+- Compliance is checked at plan time (Constitution Check) and at review time (checklist above). Any
+  justified exception MUST be recorded in the plan's Complexity Tracking with the simpler
+  alternative that was rejected and why.
+- Moving a V2 capability (for example, Device Owner mode or logs) into scope requires a constitution
+  amendment first.
+
+**Version**: 2.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-10
