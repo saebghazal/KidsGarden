@@ -1,7 +1,8 @@
 # VPN Forwarding Qualification (T050, G-VPN)
 
-**Status**: NOT RUN. No device or toolchain was available when the engine was written. The
-G-VPN gate stays closed until every row below has a recorded synthetic result.
+**Status**: NOT RUN. The debug APK with the native tunnel builds (2026-10-11), but no row
+below has been measured on a device. The G-VPN gate stays closed until every row has a
+recorded synthetic result.
 
 Use only synthetic traffic from test devices and test servers you control. Never capture a
 real child's traffic. Record numbers, not packet contents.
