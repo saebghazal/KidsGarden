@@ -56,7 +56,7 @@ class SetupFlowTest {
             override fun epochMillis() = 1_000L
         },
         policySink = object : NetworkPolicySink {
-            override suspend fun apply(policy: NetworkPolicy, generation: Long) = Unit
+            override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) = Unit
         },
         boundaryScheduler = object : BoundaryScheduler {
             override fun schedule(atElapsedMillis: Long, generation: Long) = Unit

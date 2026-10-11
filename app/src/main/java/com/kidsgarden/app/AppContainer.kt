@@ -1,10 +1,10 @@
 package com.kidsgarden.app
 
 import android.content.Context
+import com.kidsgarden.app.calls.TelephonyCallStateMonitor
 import com.kidsgarden.app.data.DataStoreProvider
 import com.kidsgarden.app.data.SettingsDocument
 import com.kidsgarden.app.data.SettingsRepository
-import com.kidsgarden.app.domain.BoundaryScheduler
 import com.kidsgarden.app.domain.DomainEvent
 import com.kidsgarden.app.domain.DullIntensity
 import com.kidsgarden.app.domain.SessionManager
@@ -16,6 +16,7 @@ import com.kidsgarden.app.receivers.DeviceEventCoordinator
 import com.kidsgarden.app.security.ParentPinManager
 import com.kidsgarden.app.security.PinHasher
 import com.kidsgarden.app.vpn.AndroidVpnServiceLauncher
+import com.kidsgarden.app.vpn.ServiceBoundaryScheduler
 import com.kidsgarden.app.vpn.Tun2SocksForwardingEngine
 import com.kidsgarden.app.vpn.VpnDullingController
 import kotlinx.coroutines.CoroutineScope
@@ -61,11 +62,17 @@ class AppContainer(context: Context) {
         selectedIntensity = { _settings.value?.dullIntensity ?: DullIntensity.MEDIUM },
     )
 
-    val sessionManager = SessionManager(
+    /** Normal phone calls only (T061). Started at process start; restarts when permission changes. */
+    val callMonitor = TelephonyCallStateMonitor(appContext, time)
+
+    val sessionManager: SessionManager = SessionManager(
         time = time,
         policySink = vpnController,
-        boundaryScheduler = NoBoundariesYet,
+        boundaryScheduler = ServiceBoundaryScheduler { generation ->
+            sessionManager.dispatch(DomainEvent.DeadlineObserved(generation))
+        },
         scope = appScope,
+        callSource = callMonitor,
     )
 
     /** Screen-off, unlock, and sampled lock state, reported as domain events (T056). */
@@ -98,17 +105,18 @@ class AppContainer(context: Context) {
                     sessionManager.dispatch(DomainEvent.SettingsChanged(document.toDomainSettings()))
                 }
         }
+        callMonitor.start()
+        appScope.launch {
+            callMonitor.observations.collect { sessionManager.dispatch(DomainEvent.CallAggregateChanged(it)) }
+        }
+        appScope.launch {
+            callMonitor.capability.collect { sessionManager.dispatch(DomainEvent.CallCapabilityChanged(it)) }
+        }
         appScope.launch {
             vpnController.capability
                 .map { it.capability }
                 .distinctUntilChanged()
                 .collect { sessionManager.dispatch(DomainEvent.VpnCapabilityChanged(it)) }
         }
-    }
-
-    /** Placeholder until ServiceBoundaryScheduler exists (T060); no grants exist before then. */
-    private object NoBoundariesYet : BoundaryScheduler {
-        override fun schedule(atElapsedMillis: Long, generation: Long) = Unit
-        override fun cancel() = Unit
     }
 }

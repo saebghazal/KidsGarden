@@ -19,6 +19,7 @@ class FailSafePolicyTest {
 
     private class FakeEngine(var startResult: EngineStartResult = EngineStartResult.Running) : ForwardingEngine {
         val applied = mutableListOf<Pair<ThrottleProfile, Long>>()
+        val guards = mutableListOf<PolicyGuard?>()
         var initial: ThrottleProfile? = null
         var stops = 0
         var onFailure: ((EngineFailure) -> Unit)? = null
@@ -36,7 +37,10 @@ class FailSafePolicyTest {
             return startResult
         }
 
-        override fun apply(profile: ThrottleProfile, generation: Long): Boolean = applied.add(profile to generation)
+        override fun apply(profile: ThrottleProfile, generation: Long, guard: PolicyGuard?): Boolean {
+            guards += guard
+            return applied.add(profile to generation)
+        }
 
         override fun stop() {
             stops++
@@ -191,6 +195,16 @@ class FailSafePolicyTest {
         val before = engine.applied.size
         controller.apply(NetworkPolicy.Normal, generation = 9)
         assertEquals(before, engine.applied.size)
+    }
+
+    @Test
+    fun relaxedPolicyCarriesItsDeadlineAndDullFallback() = runTest {
+        serviceEstablishesTunnel()
+        controller.start()
+        controller.apply(NetworkPolicy.Normal, generation = 3, validUntilElapsedMillis = 600_000L)
+        assertEquals(PolicyGuard(600_000L, mediumDull), engine.guards.last())
+        controller.apply(NetworkPolicy.Dull(DullIntensity.MEDIUM), generation = 4)
+        assertEquals(null, engine.guards.last())
     }
 
     @Test

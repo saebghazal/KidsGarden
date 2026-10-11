@@ -70,6 +70,7 @@ class VpnDullingController(
 
     private var latestGeneration = Long.MIN_VALUE
     private var latestPolicy: NetworkPolicy? = null
+    private var latestValidUntil: Long? = null
 
     @Volatile
     private var engineRunning = false
@@ -79,12 +80,13 @@ class VpnDullingController(
 
     fun consentGranted(): Boolean = launcher.consentGranted()
 
-    override suspend fun apply(policy: NetworkPolicy, generation: Long) {
+    override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) {
         mutex.withLock {
             if (generation < latestGeneration) return
             latestGeneration = generation
             latestPolicy = policy
-            if (engineRunning) engine.apply(currentProfile(), generation)
+            latestValidUntil = validUntilElapsedMillis
+            if (engineRunning) engine.apply(currentProfile(), generation, currentGuard())
         }
     }
 
@@ -138,7 +140,7 @@ class VpnDullingController(
             EngineStartResult.Running -> {
                 mutex.withLock {
                     engineRunning = true
-                    engine.apply(currentProfile(), latestGeneration)
+                    engine.apply(currentProfile(), latestGeneration, currentGuard())
                 }
                 report(VpnCapability.RUNNING, null)
                 true
@@ -173,6 +175,14 @@ class VpnDullingController(
             is ShapingDecision.Shape -> decision.profile
             is ShapingDecision.Unavailable -> ThrottleProfile.from(table.getValue(selectedIntensity()))
         }
+    }
+
+    /** Past its deadline a relaxed policy falls back to the Dull profile it would end in. */
+    internal fun currentGuard(): PolicyGuard? {
+        val until = latestValidUntil ?: return null
+        val table = profiles()
+        val fallbackIntensity = (latestPolicy as? NetworkPolicy.SoftLanding)?.target ?: selectedIntensity()
+        return PolicyGuard(until, ThrottleProfile.from(table.getValue(fallbackIntensity)))
     }
 
     private fun report(capability: VpnCapability, reason: VpnUnavailableReason?): VpnCapabilitySnapshot {

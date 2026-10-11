@@ -26,6 +26,8 @@ data class AuthorizationState(
     val vpnCapability: VpnCapability = VpnCapability.UNAVAILABLE,
     val callCapability: CallDetectionCapability = CallDetectionCapability.UNAVAILABLE,
     val callState: CallSourceState = CallSourceState.UNAVAILABLE,
+    /** Latest call-monitor generation seen; older observations are stale. */
+    val callMonitorGeneration: Long = Long.MIN_VALUE,
     val interactiveAndUnlocked: Boolean = false,
 ) {
     /** True when setup and live capability allow new grants (Assumptions; FR-019). */

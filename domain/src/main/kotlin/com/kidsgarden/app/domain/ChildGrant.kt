@@ -78,6 +78,42 @@ data class ChildGrant(
         }
     }
 
+    /** Starts a pause at [e]. Already paused or invalid at [e] → null. */
+    fun pausedAt(e: Long): ChildGrant? {
+        if (isPaused || consumedMillis(e) == null) return null
+        return copy(pauseStartElapsedMillis = e)
+    }
+
+    /** Closes the open pause at [e] (P += e − a), checked; not paused or invalid → null. */
+    fun resumedAt(e: Long): ChildGrant? {
+        val a = pauseStartElapsedMillis ?: return null
+        if (e < a) return null
+        return try {
+            copy(completedPauseMillis = Math.addExact(completedPauseMillis, e - a), pauseStartElapsedMillis = null)
+        } catch (_: ArithmeticException) {
+            null
+        }
+    }
+
+    /**
+     * Elapsed time of the next mode boundary (ramp start, then expiry) if play continued
+     * from [e], or null at or past expiry. While paused this projects from frozen play, so
+     * it is the bounded revalidation checkpoint.
+     */
+    fun nextBoundaryElapsed(e: Long): Long? {
+        val c = consumedMillis(e) ?: return null
+        val untilNext = when {
+            c < durationMillis - rampMillis -> durationMillis - rampMillis - c
+            c < durationMillis -> durationMillis - c
+            else -> return null
+        }
+        return try {
+            Math.addExact(e, untilNext)
+        } catch (_: ArithmeticException) {
+            null
+        }
+    }
+
     /** Parent-facing projected expiry (epoch), excluding any pause still in progress. */
     fun projectedExpiryEpochMillis(): Long? = try {
         Math.addExact(Math.addExact(startEpochMillis, durationMillis), completedPauseMillis)

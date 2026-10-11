@@ -159,7 +159,7 @@ class ParentModeTest {
     fun staleGenerationEffectsAreIgnored() = runTest {
         val applied = mutableListOf<Pair<NetworkPolicy, Long>>()
         val sink = object : NetworkPolicySink {
-            override suspend fun apply(policy: NetworkPolicy, generation: Long) {
+            override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) {
                 applied += policy to generation
             }
         }

@@ -64,6 +64,22 @@
     <string name="vpn_status_denied">VPN permission was not given. You can try again at any time.</string>
     <string name="vpn_status_failed">The VPN could not start. Another VPN app may be active.</string>
 
+    <!-- Setup: phone calls (T062) -->
+    <string name="phone_title">Phone calls</string>
+    <string name="phone_body">Kids Garden can pause play time during normal phone calls. Android will ask to let Kids Garden see whether a phone call is in progress. Kids Garden never sees who is calling or any call details.</string>
+    <string name="phone_allow">Allow call detection</string>
+    <string name="phone_skip">Skip</string>
+    <string name="phone_allowed">Play time pauses during normal phone calls.</string>
+
+    <!-- Give phone to child (T063) -->
+    <string name="child_duration_title">How long can your child play?</string>
+    <plurals name="child_duration_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <string name="child_start_failed">Play time could not start. Please try again.</string>
+    <string name="child_started">Play time has started.</string>
+
     <!-- Parent PIN entry (T053) -->
     <string name="pin_entry_title">Enter parent PIN</string>
     <string name="pin_unlock">Unlock</string>
