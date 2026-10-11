@@ -72,7 +72,14 @@
         <item quantity="other">Please wait %1$d seconds before trying again.</item>
     </plurals>
 
-    <!-- Parent home until Parent Actions exists (T054) -->
-    <string name="parent_home_title">Kids Garden</string>
-    <string name="parent_home_vpn">VPN setup</string>
+    <!-- Parent actions (T054) -->
+    <string name="actions_title">Parent options</string>
+    <string name="action_use_as_parent">Use phone as parent</string>
+    <string name="action_give_to_child">Give phone to child</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_vpn_setup">VPN setup</string>
+
+    <!-- Parent Mode status (T055); no timer -->
+    <string name="parent_mode_title">Parent Mode</string>
+    <string name="parent_mode_exit">Exit Parent Mode</string>
 </resources>

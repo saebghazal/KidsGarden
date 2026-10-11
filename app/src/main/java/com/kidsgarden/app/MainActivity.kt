@@ -29,6 +29,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Permissions can change in system settings while the app is away.
         container.setupStatus.refresh()
+        container.deviceEvents.sample()
         container.sessionManager.dispatch(DomainEvent.UiOpened)
     }
 

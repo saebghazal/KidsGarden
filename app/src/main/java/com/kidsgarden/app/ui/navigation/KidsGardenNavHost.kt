@@ -20,11 +20,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kidsgarden.app.AppContainer
 import com.kidsgarden.app.data.SetupFlags
+import com.kidsgarden.app.domain.AuthorizationMode
+import com.kidsgarden.app.domain.DisplayMode
 import com.kidsgarden.app.domain.DomainEvent
 import com.kidsgarden.app.domain.SetupLimitation
 import com.kidsgarden.app.permissions.rememberNotificationPermissionLauncher
 import com.kidsgarden.app.permissions.rememberVpnPermissionLauncher
-import com.kidsgarden.app.ui.dashboard.ParentHomeScreen
+import com.kidsgarden.app.ui.dashboard.ParentActionScreen
+import com.kidsgarden.app.ui.dashboard.ParentModeScreen
 import com.kidsgarden.app.ui.pin.ParentPinScreen
 import com.kidsgarden.app.ui.pin.ParentPinViewModel
 import com.kidsgarden.app.ui.setup.CreatePinScreen
@@ -36,6 +39,7 @@ import com.kidsgarden.app.ui.setup.WelcomeScreen
 import com.kidsgarden.app.ui.setup.vpnSetupStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Route names. Protected routes register themselves through [guardedComposable]. */
 object Routes {
@@ -46,9 +50,8 @@ object Routes {
     const val PIN = "pin"
     const val NOTIFICATIONS = "setup/notifications"
     const val VPN = "setup/vpn"
-
-    /** Temporary parent landing until Parent Actions (T054). */
-    const val HOME = "home"
+    const val ACTIONS = "actions"
+    const val PARENT_MODE = "parentMode"
 
     /** Every route registered behind the parent-access guard. */
     internal val protected: MutableSet<String> = mutableSetOf()
@@ -135,8 +138,13 @@ fun KidsGardenNavHost(
             }
             val pinViewModel = viewModel { ParentPinViewModel(container.pinManager) }
             ParentPinScreen(viewModel = pinViewModel, time = container.time, onAccepted = {
-                val onboarded = setup?.onboardingComplete == true
-                openParentInterface(if (onboarded) Routes.HOME else Routes.NOTIFICATIONS)
+                openParentInterface(
+                    when {
+                        setup?.onboardingComplete != true -> Routes.NOTIFICATIONS
+                        session.state.value.authorizationMode == AuthorizationMode.PARENT_MODE -> Routes.PARENT_MODE
+                        else -> Routes.ACTIONS
+                    },
+                )
             })
         }
 
@@ -172,20 +180,42 @@ fun KidsGardenNavHost(
                         val saved = repository.updateVpnPreference(true).isSuccess &&
                             repository.updateSetupFlags(SetupFlags(pinCreated = true, onboardingComplete = true)).isSuccess
                         saveFailed = !saved
-                        if (saved) navController.replaceAll(Routes.HOME)
+                        if (saved) navController.replaceAll(Routes.ACTIONS)
                     }
                 },
             )
         }
 
-        guardedComposable(Routes.HOME, accessActive, denied) {
-            ParentHomeScreen(
-                displayMode = snapshot.displayMode,
+        guardedComposable(Routes.ACTIONS, accessActive, denied) {
+            ParentActionScreen(
+                protectionReady = snapshot.displayMode != DisplayMode.SETUP_REQUIRED,
+                onUseAsParent = {
+                    snapshot.grantPermission?.let { permission ->
+                        scope.launch {
+                            // Fresh lock sample first, so the reducer decides on current state.
+                            container.deviceEvents.sample()
+                            session.dispatch(DomainEvent.StartParentRequested(permission))
+                            val started = withTimeoutOrNull(START_CONFIRM_TIMEOUT_MS) {
+                                session.state.first { it.authorizationMode == AuthorizationMode.PARENT_MODE }
+                            }
+                            if (started != null) navController.replaceAll(Routes.PARENT_MODE)
+                        }
+                    }
+                },
+                onGiveToChild = null,
+                onSettings = null,
                 onVpnSetup = { navController.navigate(Routes.VPN) },
             )
         }
+
+        guardedComposable(Routes.PARENT_MODE, accessActive, denied) {
+            // Exiting revokes Parent Mode and parent access; the gate then returns to the PIN.
+            ParentModeScreen(onExit = { session.dispatch(DomainEvent.ManualParentExit) })
+        }
     }
 }
+
+private const val START_CONFIRM_TIMEOUT_MS = 2_000L
 
 @Composable
 private fun RedirectToPinIf(condition: Boolean, navController: NavController) {

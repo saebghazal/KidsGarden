@@ -12,6 +12,7 @@ import com.kidsgarden.app.domain.TimeProvider
 import com.kidsgarden.app.permissions.AndroidSetupStatusProvider
 import com.kidsgarden.app.permissions.PermissionStatusProvider
 import com.kidsgarden.app.platform.time.AndroidTimeProvider
+import com.kidsgarden.app.receivers.DeviceEventCoordinator
 import com.kidsgarden.app.security.ParentPinManager
 import com.kidsgarden.app.security.PinHasher
 import com.kidsgarden.app.vpn.AndroidVpnServiceLauncher
@@ -67,6 +68,9 @@ class AppContainer(context: Context) {
         scope = appScope,
     )
 
+    /** Screen-off, unlock, and sampled lock state, reported as domain events (T056). */
+    val deviceEvents = DeviceEventCoordinator(appContext, sessionManager)
+
     val setupStatus = AndroidSetupStatusProvider(
         permissions = PermissionStatusProvider(appContext),
         vpnCapability = vpnController.capability,
@@ -76,6 +80,7 @@ class AppContainer(context: Context) {
     )
 
     init {
+        deviceEvents.start()
         appScope.launch {
             var first = true
             settingsRepository.observeSettings()
