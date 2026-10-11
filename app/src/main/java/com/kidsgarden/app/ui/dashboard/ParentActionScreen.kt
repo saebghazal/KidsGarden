@@ -26,6 +26,7 @@ fun ParentActionScreen(
     onGiveToChild: (() -> Unit)?,
     onSettings: (() -> Unit)?,
     onVpnSetup: () -> Unit,
+    onStatus: (() -> Unit)? = null,
 ) {
     SetupScaffold(
         title = stringResource(R.string.actions_title),
@@ -41,6 +42,11 @@ fun ParentActionScreen(
             if (onSettings != null) {
                 OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_settings))
+                }
+            }
+            if (onStatus != null) {
+                OutlinedButton(onClick = onStatus, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.action_status))
                 }
             }
             if (!protectionReady) {

@@ -16,6 +16,12 @@ sealed interface DomainEvent {
     data object PinVerified : DomainEvent
     data object PinRejected : DomainEvent
 
+    /** The new PIN was durably saved. Every grant and all parent access end. */
+    data object PinChanged : DomainEvent
+
+    /** The parent is turning VPN dulling off. Grants end before the VPN stops. */
+    data object VpnStopRequested : DomainEvent
+
     /** [grantPermission] must be the unused one-use permission issued on PIN entry. */
     data class StartParentRequested(val grantPermission: Long) : DomainEvent
     data class StartChildRequested(val grantPermission: Long, val durationMinutes: Int) : DomainEvent

@@ -24,6 +24,10 @@ data class ParentFacingSnapshot(
     val dullIntensity: DullIntensity,
     /** Nonnegative remaining child play, frozen during a call pause; null without a grant. */
     val remainingPlayMillis: Long?,
+    /** True while a phone call pauses play. */
+    val playPaused: Boolean,
+    /** Elapsed time at which [remainingPlayMillis] was computed, for a display-only ticker. */
+    val snapshotElapsedMillis: Long,
     /** True only while the parent interface is unlocked by a fresh PIN entry. */
     val parentAccessActive: Boolean,
     /** Unused one-use grant permission, if any. In memory only; never persisted. */
@@ -119,6 +123,8 @@ class SessionManager(
             setupComplete = state.setupComplete,
             dullIntensity = state.settings.dullIntensity,
             remainingPlayMillis = state.childGrant?.remainingMillis(now.elapsedMillis),
+            playPaused = state.childGrant?.isPaused == true,
+            snapshotElapsedMillis = now.elapsedMillis,
             parentAccessActive = state.parentAccess != null,
             grantPermission = state.parentAccess?.grantPermission,
         )

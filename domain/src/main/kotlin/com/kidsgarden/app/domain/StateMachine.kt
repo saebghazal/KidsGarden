@@ -11,8 +11,8 @@ data class ReduceResult(
  * Pure: no Android, storage, or VPN access; time arrives as a [TimeSnapshot].
  *
  * Foundational transitions (T015), DULL/capability (T045), Parent Mode (T051), child
- * grants (T058), telephony pause (T059), and Soft Landing stages (T070). Settings effects
- * (T077) remain.
+ * grants (T058), telephony pause (T059), Soft Landing stages (T070), and settings effects
+ * (T077).
  */
 object StateMachine {
 
@@ -40,6 +40,12 @@ object StateMachine {
             DomainEvent.SettingsInvalid -> revokeToDull(state.copy(settings = DomainSettings()))
 
             DomainEvent.PinVerified -> issueParentAccess(state)
+
+            DomainEvent.PinChanged -> revokeToDull(state)
+
+            // Grants end first; the parent stays in Settings to finish stopping the VPN.
+            DomainEvent.VpnStopRequested ->
+                if (state.mode == AuthorizationMode.DULL) unchanged(state) else expireToDull(state)
 
             DomainEvent.ParentUiLeft -> clearParentAccess(state)
 
@@ -110,8 +116,8 @@ object StateMachine {
     }
 
     /**
-     * The grant ran out: discard it and return to DULL. Unlike a revocation, a parent who
-     * happens to be in the parent interface stays there.
+     * The grant ran out, or the parent ended it from Settings: discard it and return to DULL.
+     * Unlike a revocation, a parent in the parent interface stays there.
      */
     private fun expireToDull(state: AuthorizationState): ReduceResult {
         val next = state.copy(
