@@ -9,6 +9,15 @@ plugins {
 // is checked out; without it the app still builds and reports the VPN as unavailable.
 val hevSubmodule = file("src/main/cpp/hev-socks5-tunnel/Android.mk")
 
+// Release signing (T094). The key and its passwords live outside the repository, in a
+// properties file named by KIDSGARDEN_SIGNING_PROPERTIES or, by default,
+// ~/.kidsgarden/signing.properties. Without it, release builds are produced unsigned.
+val signingPropertiesFile = (System.getenv("KIDSGARDEN_SIGNING_PROPERTIES")
+    ?: "${System.getProperty("user.home")}/.kidsgarden/signing.properties").let(::File)
+val signingProperties = java.util.Properties().apply {
+    if (signingPropertiesFile.isFile) signingPropertiesFile.inputStream().use(::load)
+}
+
 android {
     namespace = "com.kidsgarden.app"
     compileSdk = 36
@@ -28,8 +37,20 @@ android {
         }
     }
 
+    signingConfigs {
+        if (signingProperties.getProperty("storeFile") != null) {
+            create("release") {
+                storeFile = File(signingProperties.getProperty("storeFile"))
+                storePassword = signingProperties.getProperty("storePassword")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                keyPassword = signingProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

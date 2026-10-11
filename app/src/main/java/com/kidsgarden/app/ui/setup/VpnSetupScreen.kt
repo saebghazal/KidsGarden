@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.kidsgarden.app.R
@@ -51,7 +52,10 @@ fun VpnSetupScreen(
                 VpnSetupStatus.RUNNING -> Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_finish))
                 }
-                VpnSetupStatus.STARTING -> CircularProgressIndicator()
+                VpnSetupStatus.STARTING -> {
+                    val starting = stringResource(R.string.vpn_status_starting)
+                    CircularProgressIndicator(modifier = Modifier.semantics { contentDescription = starting })
+                }
                 VpnSetupStatus.NOT_STARTED -> Button(onClick = onSetUp, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.vpn_set_up))
                 }

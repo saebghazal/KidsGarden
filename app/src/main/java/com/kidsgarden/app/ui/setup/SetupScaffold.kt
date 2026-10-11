@@ -18,7 +18,11 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** Shared calm layout for parent setup screens: heading, scrollable body, actions. */
+/**
+ * Shared calm layout for parent screens: heading, body, then actions, in reading and
+ * TalkBack focus order. The whole screen scrolls, so every action stays reachable at large
+ * font sizes on small phones.
+ */
 @Composable
 internal fun SetupScaffold(
     title: String,
@@ -30,15 +34,11 @@ internal fun SetupScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.headlineMedium,

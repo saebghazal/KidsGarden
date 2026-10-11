@@ -2,9 +2,21 @@
 
 ## Current repository status
 
-This is a planning repository, not a runnable Android app yet. There is no Gradle wrapper/app module/APK from this task. The commands below are the expected validation entry points **after implementation** creates the planned structure. They have not been run successfully during planning.
+Updated 2026-10-11. The app and its tests are written for every user story (83 of 94 tasks), but **nothing has been compiled, run, or tested on a device**. Every gate in the [gate register](plan.md#gate-register) is still OPEN.
 
-**Implementation readiness:** The all-call feasibility gate is removed. Phase 1 Setup and Phase 2 Foundational can start. Only normal mobile/Telecom calls pause play; WhatsApp, the dialer and the default SMS/RCS app are excluded from dulling but never pause play. Review [research R1](research.md#r1--scoped-v1-call-handling-telephony-only) and the remaining [gate register](plan.md#gate-register). Device qualification and release acceptance are still pending.
+Before the first build:
+
+1. Open the project in Android Studio and let it sync. This generates the Gradle wrapper (T001); take any version fixes it suggests.
+2. Add the audited forwarding engine (without it the app builds but reports the VPN as unavailable):
+
+   ```powershell
+   git submodule add https://github.com/heiher/hev-socks5-tunnel.git app/src/main/cpp/hev-socks5-tunnel
+   cd app/src/main/cpp/hev-socks5-tunnel
+   git checkout 07bea57d20f71c9804055c2e2a0787d65a7277cb
+   git submodule update --init --recursive
+   ```
+
+Only normal mobile/Telecom calls pause play; WhatsApp, the dialer and the default SMS/RCS app are excluded from dulling but never pause play. See [research R1](research.md#r1--scoped-v1-call-handling-telephony-only).
 
 ## Prerequisites
 
@@ -110,3 +122,68 @@ Only after scoped V1 acceptance and all remaining applicable release gates pass:
 Configure signing through local/secure build inputs; keep keys and passwords out of source and command output. Verify the signed APK on both OS versions. Inspect merged permissions, backup rules, runtime dependencies, Kotlin/native output and limitation text. Confirm no database, backend, cloud account, analytics, logs, content collection or raw PIN. Prefer a private APK; internal testing is an optional later distribution route, not a requirement to publish now.
 
 A build that merely installs is not a released Kids Garden V1. Scoped call behavior plus actual forwarding, lifecycle, privacy and quality evidence are required; universal detection is not a release gate.
+
+## Private APK signing and sideloading
+
+> **Not for release yet.** These steps are recorded now so the release path is ready, but a
+> signed APK must not be given to families until every gate in the
+> [gate register](plan.md#gate-register) is green. Until then, use them only for test devices.
+
+### 1. Create the signing key, outside the repository
+
+Keep the key and its passwords out of the repository and out of shell history. `.gitignore`
+already excludes `*.jks`, `*.keystore` and `keystore.properties`, but the key belongs in a
+separate folder entirely:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.kidsgarden" | Out-Null
+keytool -genkeypair -v -keystore "$env:USERPROFILE\.kidsgarden\kidsgarden-release.jks" `
+  -alias kidsgarden -keyalg RSA -keysize 4096 -validity 10000
+```
+
+`keytool` prompts for the passwords and the certificate name; it ships with the JDK that
+Android Studio uses (`<Android Studio>\jbr\bin`).
+
+**Back up the `.jks` file and both passwords somewhere safe and offline.** Every update must be
+signed with the same key. If the key is lost, the app cannot be updated: it has to be
+uninstalled and reinstalled, which deletes its settings and PIN.
+
+### 2. Point the build at the key
+
+Create `%USERPROFILE%\.kidsgarden\signing.properties` (or set the environment variable
+`KIDSGARDEN_SIGNING_PROPERTIES` to another path):
+
+```properties
+storeFile=C:/Users/<you>/.kidsgarden/kidsgarden-release.jks
+storePassword=<store password>
+keyAlias=kidsgarden
+keyPassword=<key password>
+```
+
+`app/build.gradle.kts` reads this file only when it exists. Without it, release builds are
+produced unsigned and cannot be installed.
+
+### 3. Build and verify
+
+```powershell
+.\gradlew.bat :domain:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+& "$env:LOCALAPPDATA\Android\Sdk\build-tools\<version>\apksigner.bat" verify --print-certs app\build\outputs\apk\release\app-release.apk
+```
+
+Check that the certificate printed is yours, then complete the checks in "Private release
+validation" above on both Android 15 and Android 16.
+
+### 4. Install on the child's phone
+
+With USB debugging (Settings → System → Developer options → USB debugging):
+
+```powershell
+adb install -r app\build\outputs\apk\release\app-release.apk
+```
+
+Without a computer: copy the APK to the phone, open it from the Files app, and allow
+"Install unknown apps" for that app when Android asks. Turn that permission off again
+afterward. Updates install the same way and keep settings only when signed with the same key.
+
+After installing, open Kids Garden as the parent and complete setup. Turn off USB debugging
+on the child's phone when you are done.

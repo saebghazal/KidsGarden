@@ -4,7 +4,7 @@
 
 **Input**: `specs/001-kids-garden-v1/spec.md` (including clarification session 2026-10-10) plus the user's Kotlin/Compose architecture, UI, event, testing and 13-phase implementation request.
 
-**Status**: Planning artifacts regenerated after clarifications: telephony-only call pause, default SMS/RCS exclusion, English-only text, memory-only authorization. No NEEDS CLARIFICATION remains. Phase 1 Setup and Phase 2 Foundational can start. No application implementation, build, or device qualification is claimed.
+**Status** (updated 2026-10-11, T093): Code and tests for Phases 1–8 are written on branch `001-kids-garden-v1` (83 of 94 tasks). Nothing has been compiled, run, or qualified on a device: no JDK or Android SDK was available. Every gate below therefore remains OPEN. Evidence recorded so far is source-level only and listed per gate.
 
 ## Summary
 
@@ -57,14 +57,16 @@ No violation requires justification. One wording note: Principle I and the V1 sc
 
 ### Gate register
 
-| Gate | Status | Required evidence / effect |
-| --- | --- | --- |
-| Scoped call acceptance | Implementation/qualification pending | Telephony pause on single and dual SIM; WhatsApp/game voice do not pause; communication exclusions where possible; permission fallback/countdown/privacy. Not a blocker for Phase 1/2. |
-| G-LOCK | OPEN qualification | Screen noninteractive, physical display-off, keyguard and unlock behavior on API 35/36; no Parent Mode survives lock/unlock. Unsupported paths cannot be claimed protected. |
-| G-VPN | OPEN prototype | Actual local TCP/UDP/IPv4/IPv6 forwarding, protected sockets, reconnect, bounded memory; not a TUN skeleton. Prototype work does not depend on call qualification. |
-| G-LIFECYCLE | OPEN qualification | Foreground type/consent eligibility, revoke, boot, process restart, user stop, second VPN; no startup promises without running service. |
-| G-PRIVACY | OPEN audit | Kotlin/native error paths produce no app logs or retained content/destinations; backup exclusions; source/license audit; settings file contains no authorization/session fields. |
-| G-QUALITY | OPEN validation | Unit/UI/manual suite and spec performance, battery, accessibility, English string-resource checks. |
+Updated 2026-10-11 (T093). "Written" means code and tests exist; none have been compiled or run.
+
+| Gate | Status | Required evidence / effect | Recorded evidence | Unmet |
+| --- | --- | --- | --- | --- |
+| Scoped call acceptance | OPEN qualification | Telephony pause on single and dual SIM; WhatsApp/game voice do not pause; communication exclusions where possible; permission fallback/countdown/privacy. | Written: per-subscription `TelephonyCallStateMonitor`, pure aggregator, reducer pause rules with mandatory checkpoint; `CallPauseTest`, `CallObservationRecoveryTest`, `TelephonyStateAggregatorTest`; `CommunicationAppExclusions` with `CommunicationAppExclusionsTest`. | All tests unrun. Physical single/dual-SIM calls, WhatsApp and game voice not observed (T089). |
+| G-LOCK | OPEN qualification | Screen noninteractive, physical display-off, keyguard and unlock behavior on API 35/36; no Parent Mode survives lock/unlock. Unsupported paths cannot be claimed protected. | Written: runtime SCREEN_OFF/USER_PRESENT receivers, sampled `isInteractive`/`isDeviceLocked`; `ParentModeTest` covers every revocation path and lock-before-start. | Broadcast delivery and keyguard paths not observed on API 35/36 (T088). |
+| G-VPN | OPEN prototype | Actual local TCP/UDP/IPv4/IPv6 forwarding, protected sockets, reconnect, bounded memory; not a TUN skeleton. | Engine audited and pinned (`evidence/forwarding-engine-selection.md`); written: JNI bridge, loopback relay, shaping scheduler with deadline guard, controller reporting RUNNING only after a forwarding probe; `FailSafePolicyTest`, `VpnPolicyMapperTest`. | hev-socks5-tunnel submodule not yet added to the repository, so the native library is not built. Forwarding qualification not run (`evidence/vpn-feasibility.md`, T050). |
+| G-LIFECYCLE | OPEN qualification | Foreground type/consent eligibility, revoke, boot, process restart, user stop, second VPN; no startup promises without running service. | Written: systemExempted foreground service, `onRevoke`/failure shutdown that fails open, direct VPN-loss reporting, boot/update recovery gated on the saved preference and live consent; `RecoveryTest`. | Foreground eligibility, revoke, second VPN, boot recovery not observed on devices (T088). |
+| G-PRIVACY | OPEN audit | Kotlin/native error paths produce no app logs or retained content/destinations; backup exclusions; source/license audit; settings file contains no authorization/session fields. | Source and manifest audit clean (`evidence/privacy-audit.md`); written: `StoragePrivacyTest`; native stdout/stderr silenced. | Release classpath report, on-device backup/transfer check, runtime logcat check, and native packaging check not run (T086). |
+| G-QUALITY | OPEN validation | Unit/UI/manual suite and spec performance, battery, accessibility, English string-resource checks. | Written: domain, JVM and instrumented suites for every story, `AccessibilityTest`; all copy in `strings.xml` with no literal UI text found by search. | No suite has been run (T092). Performance, battery (T090), and user studies (T091) not done. Gradle wrapper not generated (T001). |
 
 ## Project Structure
 
@@ -87,7 +89,7 @@ specs/001-kids-garden-v1/
     parent-pin-manager.md
     vpn-dulling-controller.md
   checklists/requirements.md
-  tasks.md                         # regenerate with /speckit-tasks after this plan
+  tasks.md                         # executable checklist (generated by /speckit-tasks)
 ```
 
 ### Source Code (repository root; proposed, not generated)
@@ -203,7 +205,7 @@ English only. Every user-visible string, including the exact required wording (w
 
 ## Implementation sequence
 
-The 13 milestones remain; `tasks.md` (to be regenerated) is the executable checklist.
+The 13 milestones remain; `tasks.md` is the executable checklist.
 
 | Phase | Scope / dependencies | Exit evidence |
 | --- | --- | --- |
