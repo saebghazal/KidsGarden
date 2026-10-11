@@ -10,8 +10,8 @@ data class ReduceResult(
  * The single transition function (Constitution IV, contracts/state-machine.md).
  * Pure: no Android, storage, or VPN access; time arrives as a [TimeSnapshot].
  *
- * Foundational transitions only (T015). Story tasks add the rest: DULL/capability (T045),
- * Parent Mode (T051), child grants and call pause (T058, T059), Soft Landing (T070),
+ * Foundational transitions (T015), DULL/capability (T045), and Parent Mode (T051). Story
+ * tasks add the rest: child grants and call pause (T058, T059), Soft Landing (T070),
  * settings effects (T077).
  */
 object StateMachine {
@@ -34,23 +34,29 @@ object StateMachine {
 
             DomainEvent.ParentUiLeft -> clearParentAccess(state)
 
-            is DomainEvent.SettingsChanged -> publish(state.copy(settings = event.settings))
+            is DomainEvent.SettingsChanged -> settingsChanged(state, event.settings)
 
             is DomainEvent.CallCapabilityChanged -> publish(state.copy(callCapability = event.capability))
 
             is DomainEvent.InteractivityObserved ->
-                unchanged(state.copy(interactiveAndUnlocked = event.interactiveAndUnlocked))
+                if (event.interactiveAndUnlocked) unchanged(state.copy(interactiveAndUnlocked = true))
+                else screenOffOrLocked(state)
 
-            is DomainEvent.VpnCapabilityChanged -> publish(state.copy(vpnCapability = event.capability))
+            is DomainEvent.StartParentRequested -> startParent(state, event.grantPermission)
+
+            DomainEvent.ScreenOff,
+            DomainEvent.DeviceLocked -> screenOffOrLocked(state)
+
+            DomainEvent.UserPresent -> userPresent(state)
+
+            DomainEvent.ManualParentExit ->
+                if (state.mode == AuthorizationMode.PARENT_MODE) revokeToDull(state) else unchanged(state)
+
+            is DomainEvent.VpnCapabilityChanged -> vpnCapabilityChanged(state, event.capability)
 
             DomainEvent.PinRejected,
             DomainEvent.UiOpened,
-            is DomainEvent.StartParentRequested,
             is DomainEvent.StartChildRequested,
-            DomainEvent.ManualParentExit,
-            DomainEvent.ScreenOff,
-            DomainEvent.DeviceLocked,
-            DomainEvent.UserPresent,
             is DomainEvent.CallAggregateChanged,
             is DomainEvent.DeadlineObserved,
             DomainEvent.SettingsWriteSucceeded,
@@ -97,6 +103,86 @@ object StateMachine {
         Effect.ApplyNetworkPolicy(dullPolicy(state), state.generation),
         Effect.PublishParentStatus(state.generation),
     )
+
+    /**
+     * Live VPN capability (T045). Losing it ends any grant (DULL, SETUP_REQUIRED display);
+     * regaining it re-applies the DULL profile and never creates a grant.
+     */
+    private fun vpnCapabilityChanged(state: AuthorizationState, capability: VpnCapability): ReduceResult {
+        if (capability == state.vpnCapability) return unchanged(state)
+        val next = state.copy(vpnCapability = capability)
+        if (capability != VpnCapability.RUNNING && state.mode != AuthorizationMode.DULL) {
+            return revokeToDull(next)
+        }
+        if (next.mode != AuthorizationMode.DULL) return publish(next)
+        return ReduceResult(
+            next,
+            listOf(
+                Effect.ApplyNetworkPolicy(dullPolicy(next), next.generation),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /** A new DULL intensity takes effect immediately while DULL; grants keep their target. */
+    private fun settingsChanged(state: AuthorizationState, settings: DomainSettings): ReduceResult {
+        val next = state.copy(settings = settings)
+        val intensityChanged = settings.dullIntensity != state.settings.dullIntensity
+        if (next.mode != AuthorizationMode.DULL || !intensityChanged) return publish(next)
+        return ReduceResult(
+            next,
+            listOf(
+                Effect.ApplyNetworkPolicy(dullPolicy(next), next.generation),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /**
+     * Parent Mode (T051). Requires the unused one-use permission from the current PIN entry,
+     * an interactive unlocked phone, finished setup, and a running VPN. Commits in memory in
+     * this one step: consumes the permission, bumps the generation, and applies Normal. Any
+     * failed prerequisite leaves everything unchanged, including the permission.
+     */
+    private fun startParent(state: AuthorizationState, permission: Long): ReduceResult {
+        val access = state.parentAccess ?: return unchanged(state)
+        val eligible = access.grantPermission == permission &&
+            state.interactiveAndUnlocked &&
+            state.setupComplete &&
+            state.vpnCapability == VpnCapability.RUNNING
+        if (!eligible) return unchanged(state)
+        val next = state.copy(
+            mode = AuthorizationMode.PARENT_MODE,
+            childGrant = null,
+            parentAccess = access.copy(grantPermission = null),
+            generation = state.generation + 1,
+        )
+        return ReduceResult(
+            next,
+            listOf(
+                Effect.CancelBoundary(next.generation),
+                Effect.ApplyNetworkPolicy(NetworkPolicy.Normal, next.generation),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /**
+     * Screen off or lock: Parent Mode ends, and parent-interface access always clears.
+     * Because events are serialized, a lock processed before a start makes that start fail.
+     */
+    private fun screenOffOrLocked(state: AuthorizationState): ReduceResult {
+        val locked = state.copy(interactiveAndUnlocked = false)
+        if (locked.mode == AuthorizationMode.PARENT_MODE) return revokeToDull(locked)
+        return clearParentAccess(locked)
+    }
+
+    /** Unlock never restores Parent Mode; a surviving Parent Mode grant is revoked defensively. */
+    private fun userPresent(state: AuthorizationState): ReduceResult {
+        val unlocked = state.copy(interactiveAndUnlocked = true)
+        if (unlocked.mode == AuthorizationMode.PARENT_MODE) return revokeToDull(unlocked)
+        return unchanged(unlocked)
+    }
 
     /** A correct PIN opens the parent interface only; phone authorization is unchanged. */
     private fun issueParentAccess(state: AuthorizationState): ReduceResult {

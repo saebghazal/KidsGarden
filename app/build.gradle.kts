@@ -5,9 +5,14 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Native forwarding engine (T041). Built only when the pinned hev-socks5-tunnel submodule
+// is checked out; without it the app still builds and reports the VPN as unavailable.
+val hevSubmodule = file("src/main/cpp/hev-socks5-tunnel/Android.mk")
+
 android {
     namespace = "com.kidsgarden.app"
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.kidsgarden.app"
@@ -40,6 +45,14 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    if (hevSubmodule.exists()) {
+        externalNativeBuild {
+            ndkBuild {
+                path = file("src/main/cpp/Android.mk")
+            }
+        }
     }
 
     lint {
