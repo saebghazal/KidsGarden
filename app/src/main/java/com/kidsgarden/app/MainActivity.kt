@@ -20,13 +20,16 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MaterialTheme {
-                KidsGardenNavHost(
-                    snapshot = container.sessionManager.state,
-                    parentUiAccessCleared = container.sessionManager.parentUiAccessCleared,
-                    onLeftProtectedGraph = { container.sessionManager.dispatch(DomainEvent.ParentUiLeft) },
-                )
+                KidsGardenNavHost(container = container)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Permissions can change in system settings while the app is away.
+        container.setupStatus.refresh()
+        container.sessionManager.dispatch(DomainEvent.UiOpened)
     }
 
     override fun onStop() {

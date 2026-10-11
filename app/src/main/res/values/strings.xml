@@ -24,6 +24,55 @@
     <!-- Parent Mode (FR-008) -->
     <string name="parent_mode_confirmation">Parent Mode is on. Locking the phone or turning off the screen ends it.</string>
 
-    <!-- Temporary entry route until setup and PIN screens exist (T038, T053) -->
-    <string name="entry_placeholder">Kids Garden</string>
+    <!-- Common -->
+    <string name="action_continue">Continue</string>
+    <string name="action_try_again">Try again</string>
+    <string name="action_finish">Finish</string>
+
+    <!-- Setup: welcome and privacy (T034) -->
+    <string name="welcome_title">Welcome to Kids Garden</string>
+    <string name="welcome_body">Kids Garden keeps this phone calm by default. Games, videos, and browsing stay slow until you start play time.</string>
+    <string name="welcome_start">Get started</string>
+    <string name="privacy_title">Privacy and limits</string>
+    <string name="privacy_local_vpn">Kids Garden slows the internet with a VPN that runs only on this phone. Traffic is not sent to any Kids Garden server.</string>
+    <string name="privacy_no_account">There is no account, and setup never resets the phone.</string>
+
+    <!-- Setup: create PIN (T035) -->
+    <string name="create_pin_title">Create a parent PIN</string>
+    <string name="create_pin_body">Choose six digits. You will need this PIN to give the phone to your child or change settings.</string>
+    <string name="pin_label">PIN</string>
+    <string name="pin_confirm_label">Confirm PIN</string>
+    <string name="pin_save">Save PIN</string>
+    <string name="pin_invalid_format">Use exactly six digits.</string>
+    <string name="pin_confirmation_mismatch">The two PINs do not match.</string>
+    <string name="pin_already_created">A parent PIN already exists.</string>
+
+    <!-- Setup: notifications (T037) -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_body">While Kids Garden is running, Android shows a small notification. It only says “Kids Garden is running.”</string>
+    <string name="notifications_allow">Allow notifications</string>
+    <string name="notifications_denied">Notifications are off. Kids Garden still works.</string>
+    <string name="notifications_allowed">Notifications are on.</string>
+
+    <!-- Setup: VPN (T036) -->
+    <string name="vpn_title">Slow down the internet</string>
+    <string name="vpn_body">Kids Garden uses Android’s VPN feature to slow the internet on this phone. Traffic stays on the phone and goes straight to your network. Phone calls, text messages, and WhatsApp are not slowed.</string>
+    <string name="vpn_prompt_notice">Android will ask you to allow the VPN connection.</string>
+    <string name="vpn_set_up">Set up VPN</string>
+    <string name="vpn_status_running">Dull Mode is active.</string>
+    <string name="vpn_status_starting">Starting the VPN…</string>
+    <string name="vpn_status_denied">VPN permission was not given. You can try again at any time.</string>
+    <string name="vpn_status_failed">The VPN could not start. Another VPN app may be active.</string>
+
+    <!-- Parent PIN entry (T053) -->
+    <string name="pin_entry_title">Enter parent PIN</string>
+    <string name="pin_unlock">Unlock</string>
+    <plurals name="pin_retry_delay">
+        <item quantity="one">Please wait %1$d second before trying again.</item>
+        <item quantity="other">Please wait %1$d seconds before trying again.</item>
+    </plurals>
+
+    <!-- Parent home until Parent Actions exists (T054) -->
+    <string name="parent_home_title">Kids Garden</string>
+    <string name="parent_home_vpn">VPN setup</string>
 </resources>
