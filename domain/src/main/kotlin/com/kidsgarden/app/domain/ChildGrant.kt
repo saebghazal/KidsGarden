@@ -96,23 +96,22 @@ data class ChildGrant(
     }
 
     /**
-     * Elapsed time of the next mode boundary (ramp start, then expiry) if play continued
-     * from [e], or null at or past expiry. While paused this projects from frozen play, so
-     * it is the bounded revalidation checkpoint.
+     * Elapsed time of the next boundary (ramp start, each Soft Landing stage, then expiry) if
+     * play continued from [e], or null at or past expiry. While paused this projects from
+     * frozen play, so it is the bounded revalidation checkpoint.
      */
     fun nextBoundaryElapsed(e: Long): Long? {
         val c = consumedMillis(e) ?: return null
-        val untilNext = when {
-            c < durationMillis - rampMillis -> durationMillis - rampMillis - c
-            c < durationMillis -> durationMillis - c
-            else -> return null
-        }
+        val next = SoftLandingPolicy.nextBoundaryConsumed(durationMillis, rampMillis, c) ?: return null
         return try {
-            Math.addExact(e, untilNext)
+            Math.addExact(e, next - c)
         } catch (_: ArithmeticException) {
             null
         }
     }
+
+    /** Soft Landing stage at [e] (0..2), or null outside the ramp or if invalid. */
+    fun rampStageAt(e: Long): Int? = consumedMillis(e)?.let { SoftLandingPolicy.stage(durationMillis, rampMillis, it) }
 
     /** Parent-facing projected expiry (epoch), excluding any pause still in progress. */
     fun projectedExpiryEpochMillis(): Long? = try {

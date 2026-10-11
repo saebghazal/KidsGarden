@@ -1,8 +1,5 @@
 package com.kidsgarden.app.vpn
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -143,36 +140,16 @@ class KidsGardenVpnService : VpnService() {
     }
 
     private fun enterForeground(): Boolean = try {
-        startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
+        startForeground(
+            StatusNotification.NOTIFICATION_ID,
+            StatusNotification.build(this, openAppIntent()),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED,
+        )
         true
     } catch (_: IllegalStateException) {
         false // includes ForegroundServiceStartNotAllowedException
     } catch (_: SecurityException) {
         false
-    }
-
-    private fun buildNotification(): Notification {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.notification_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            setShowBadge(false)
-            setSound(null, null)
-            enableVibration(false)
-        }
-        manager.createNotificationChannel(channel)
-        // Neutral text only: no mode, session, or time details, safe on the lock screen.
-        return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_kids_garden)
-            .setContentTitle(getString(R.string.notification_running))
-            .setContentIntent(openAppIntent())
-            .setOngoing(true)
-            .setShowWhen(false)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .build()
     }
 
     /** Opens the app with no extras; the app itself routes to the PIN screen. */
@@ -185,7 +162,5 @@ class KidsGardenVpnService : VpnService() {
 
     companion object {
         const val ACTION_START = "com.kidsgarden.app.vpn.START"
-        private const val CHANNEL_ID = "kids_garden_status"
-        private const val NOTIFICATION_ID = 1
     }
 }

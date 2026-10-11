@@ -11,8 +11,8 @@ data class ReduceResult(
  * Pure: no Android, storage, or VPN access; time arrives as a [TimeSnapshot].
  *
  * Foundational transitions (T015), DULL/capability (T045), Parent Mode (T051), child
- * grants (T058), and telephony pause (T059). Story tasks add the rest: Soft Landing stages
- * (T070) and settings effects (T077).
+ * grants (T058), telephony pause (T059), and Soft Landing stages (T070). Settings effects
+ * (T077) remain.
  */
 object StateMachine {
 
@@ -80,11 +80,7 @@ object StateMachine {
 
     /** Policy for DULL: the selected profile when shaping works, otherwise Unavailable. */
     fun dullPolicy(state: AuthorizationState): NetworkPolicy =
-        if (state.vpnCapability == VpnCapability.RUNNING) {
-            NetworkPolicy.Dull(state.settings.dullIntensity)
-        } else {
-            NetworkPolicy.Unavailable(REASON_VPN_UNAVAILABLE)
-        }
+        DullModePolicy.policyFor(state.copy(mode = AuthorizationMode.DULL, childGrant = null), 0L)
 
     /** Process start, reboot, or update: DULL with no grant or tokens (FR-027). */
     private fun restart(state: AuthorizationState): ReduceResult {
@@ -106,6 +102,7 @@ object StateMachine {
         val next = state.copy(
             mode = AuthorizationMode.DULL,
             childGrant = null,
+            rampStage = null,
             parentAccess = null,
             generation = state.generation + 1,
         )
@@ -117,7 +114,12 @@ object StateMachine {
      * happens to be in the parent interface stays there.
      */
     private fun expireToDull(state: AuthorizationState): ReduceResult {
-        val next = state.copy(mode = AuthorizationMode.DULL, childGrant = null, generation = state.generation + 1)
+        val next = state.copy(
+            mode = AuthorizationMode.DULL,
+            childGrant = null,
+            rampStage = null,
+            generation = state.generation + 1,
+        )
         return ReduceResult(
             next,
             listOf(
@@ -185,6 +187,7 @@ object StateMachine {
         val next = state.copy(
             mode = AuthorizationMode.PARENT_MODE,
             childGrant = null,
+            rampStage = null,
             parentAccess = access.copy(grantPermission = null),
             generation = state.generation + 1,
         )
@@ -241,6 +244,7 @@ object StateMachine {
         val next = state.copy(
             mode = AuthorizationMode.CHILD_PLAY_SESSION,
             childGrant = grant,
+            rampStage = null,
             parentAccess = null,
             generation = state.generation + 1,
         )
@@ -263,8 +267,10 @@ object StateMachine {
         val grant = state.childGrant ?: return unchanged(state)
         val mode = grant.modeAt(e) ?: return revokeToDull(state)
         if (mode == AuthorizationMode.DULL) return expireToDull(state)
-        if (mode == state.mode) return unchanged(state)
-        val next = state.copy(mode = mode)
+        val stage = if (mode == AuthorizationMode.SOFT_LANDING) grant.rampStageAt(e) else null
+        // A late wake that skipped stages lands directly on the current one.
+        if (mode == state.mode && stage == state.rampStage) return unchanged(state)
+        val next = state.copy(mode = mode, rampStage = stage)
         return ReduceResult(
             next,
             listOfNotNull(
@@ -276,14 +282,7 @@ object StateMachine {
     }
 
     /** Network intent for the current grant: Normal during play, the staged ramp after. */
-    private fun grantPolicy(state: AuthorizationState, e: Long): NetworkPolicy {
-        val grant = state.childGrant ?: return dullPolicy(state)
-        return when (state.mode) {
-            AuthorizationMode.SOFT_LANDING ->
-                NetworkPolicy.SoftLanding(grant.target, grant.rampFraction(e) ?: 1.0)
-            else -> NetworkPolicy.Normal
-        }
-    }
+    private fun grantPolicy(state: AuthorizationState, e: Long): NetworkPolicy = DullModePolicy.policyFor(state, e)
 
     /** The grant's policy, valid only until its next boundary. */
     private fun grantPolicyEffect(state: AuthorizationState, e: Long): Effect =
