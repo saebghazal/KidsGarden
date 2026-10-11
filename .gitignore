@@ -19,17 +19,13 @@ local.properties
 *.keystore
 keystore.properties
 
-# IDE (project files under .idea/ that are shared stay tracked)
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/caches/
-.idea/libraries/
-.idea/shelf/
-.idea/navEditor.xml
-.idea/assetWizardSettings.xml
+# IDE (Android Studio regenerates its project files)
+.idea/
+*.iml
 .vscode/
 
 # Python tooling already present in this workspace
+pyproject.toml
 .venv/
 venv/
 __pycache__/
