@@ -1,5 +1,6 @@
 package com.kidsgarden.app.domain
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,6 +24,10 @@ data class ParentFacingSnapshot(
     val dullIntensity: DullIntensity,
     /** Nonnegative remaining child play, frozen during a call pause; null without a grant. */
     val remainingPlayMillis: Long?,
+    /** True while a phone call pauses play. */
+    val playPaused: Boolean,
+    /** Elapsed time at which [remainingPlayMillis] was computed, for a display-only ticker. */
+    val snapshotElapsedMillis: Long,
     /** True only while the parent interface is unlocked by a fresh PIN entry. */
     val parentAccessActive: Boolean,
     /** Unused one-use grant permission, if any. In memory only; never persisted. */
@@ -38,7 +43,8 @@ class SessionManager(
     private val time: TimeProvider,
     private val policySink: NetworkPolicySink,
     private val boundaryScheduler: BoundaryScheduler,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
+    private val callSource: CallStateSource? = null,
 ) {
     // Unlimited so security-relevant events (lock, revoke) are never dropped.
     private val events = Channel<DomainEvent>(Channel.UNLIMITED)
@@ -79,11 +85,32 @@ class SessionManager(
         // An effect computed for an older generation has no authority.
         if (effect.generation != currentGeneration) return
         when (effect) {
-            is Effect.ApplyNetworkPolicy -> policySink.apply(effect.policy, effect.generation)
+            is Effect.ApplyNetworkPolicy ->
+                policySink.apply(effect.policy, effect.generation, effect.validUntilElapsedMillis)
             is Effect.ScheduleBoundary -> boundaryScheduler.schedule(effect.atElapsedMillis, effect.generation)
             is Effect.CancelBoundary -> boundaryScheduler.cancel()
             is Effect.ClearParentUiAccess -> _parentUiAccessCleared.tryEmit(Unit)
+            // Off the event loop, so a slow query never delays lock or revoke handling.
+            is Effect.ReconcileCalls -> scope.launch { dispatch(DomainEvent.CallReconciled(freshCallState())) }
             is Effect.PublishParentStatus -> Unit // snapshot is published after every event
+        }
+    }
+
+    /** A failed or impossible query counts as UNAVAILABLE, which resumes countdown. */
+    private suspend fun freshCallState(): CallObservation {
+        val source = callSource
+        val fallback = CallObservation(
+            CallSourceState.UNAVAILABLE,
+            _authorization.value.callMonitorGeneration,
+            time.elapsedRealtimeMillis(),
+        )
+        if (source == null) return fallback
+        return try {
+            source.reconcile()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            fallback
         }
     }
 
@@ -96,6 +123,8 @@ class SessionManager(
             setupComplete = state.setupComplete,
             dullIntensity = state.settings.dullIntensity,
             remainingPlayMillis = state.childGrant?.remainingMillis(now.elapsedMillis),
+            playPaused = state.childGrant?.isPaused == true,
+            snapshotElapsedMillis = now.elapsedMillis,
             parentAccessActive = state.parentAccess != null,
             grantPermission = state.parentAccess?.grantPermission,
         )

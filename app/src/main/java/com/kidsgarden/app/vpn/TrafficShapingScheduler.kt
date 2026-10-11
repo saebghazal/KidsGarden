@@ -29,10 +29,24 @@ class TrafficShapingScheduler(
     initialProfile: ThrottleProfile,
     val maxQueuedBytes: Int = DEFAULT_MAX_QUEUED_BYTES,
     val maxFlows: Int = DEFAULT_MAX_FLOWS,
+    private val elapsedRealtimeMillis: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     @Volatile
-    var profile: ThrottleProfile = initialProfile
-        private set
+    private var appliedProfile: ThrottleProfile = initialProfile
+
+    @Volatile
+    private var guard: PolicyGuard? = null
+
+    /**
+     * The profile in force now. A guarded (relaxed) profile past its deadline yields the
+     * guard's fallback: traffic never keeps flowing under an expired grant just because the
+     * wake-up that would have replaced it was late.
+     */
+    val profile: ThrottleProfile
+        get() {
+            val g = guard ?: return appliedProfile
+            return if (elapsedRealtimeMillis() >= g.validUntilElapsedMillis) g.fallback else appliedProfile
+        }
 
     @Volatile
     private var generation: Long = Long.MIN_VALUE
@@ -43,12 +57,14 @@ class TrafficShapingScheduler(
     private val buckets = Direction.entries.associateWith { TokenBucket(it) }
 
     /** Applies [newProfile] unless [newGeneration] is older than the last applied one. */
-    fun apply(newProfile: ThrottleProfile, newGeneration: Long): Boolean = synchronized(applyLock) {
-        if (newGeneration < generation) return false
-        generation = newGeneration
-        profile = newProfile
-        true
-    }
+    fun apply(newProfile: ThrottleProfile, newGeneration: Long, newGuard: PolicyGuard? = null): Boolean =
+        synchronized(applyLock) {
+            if (newGeneration < generation) return false
+            generation = newGeneration
+            guard = newGuard
+            appliedProfile = newProfile
+            true
+        }
 
     /** Registers a flow, or returns null when [maxFlows] are active. */
     fun openFlow(): FlowHandle? {

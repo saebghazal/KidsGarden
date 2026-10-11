@@ -64,6 +64,22 @@
     <string name="vpn_status_denied">VPN permission was not given. You can try again at any time.</string>
     <string name="vpn_status_failed">The VPN could not start. Another VPN app may be active.</string>
 
+    <!-- Setup: phone calls (T062) -->
+    <string name="phone_title">Phone calls</string>
+    <string name="phone_body">Kids Garden can pause play time during normal phone calls. Android will ask to let Kids Garden see whether a phone call is in progress. Kids Garden never sees who is calling or any call details.</string>
+    <string name="phone_allow">Allow call detection</string>
+    <string name="phone_skip">Skip</string>
+    <string name="phone_allowed">Play time pauses during normal phone calls.</string>
+
+    <!-- Give phone to child (T063) -->
+    <string name="child_duration_title">How long can your child play?</string>
+    <plurals name="child_duration_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <string name="child_start_failed">Play time could not start. Please try again.</string>
+    <string name="child_started">Play time has started.</string>
+
     <!-- Parent PIN entry (T053) -->
     <string name="pin_entry_title">Enter parent PIN</string>
     <string name="pin_unlock">Unlock</string>
@@ -78,6 +94,55 @@
     <string name="action_give_to_child">Give phone to child</string>
     <string name="action_settings">Settings</string>
     <string name="action_vpn_setup">VPN setup</string>
+
+    <string name="action_status">Status</string>
+
+    <!-- Dashboard (T073) -->
+    <string name="dashboard_title">Status</string>
+    <string name="mode_dull">The phone is in Dull Mode.</string>
+    <string name="mode_parent">Parent Mode is on.</string>
+    <string name="mode_child">Play time is on.</string>
+    <string name="mode_soft_landing">Play time is ending.</string>
+    <string name="dashboard_remaining">%1$s of play time left</string>
+    <string name="dashboard_paused">Play time is paused during a phone call.</string>
+    <string name="dashboard_intensity">Dull level: %1$s</string>
+    <string name="dashboard_vpn_running">The VPN is running.</string>
+    <string name="dashboard_setup_complete">Setup is complete.</string>
+    <string name="dashboard_setup_incomplete">Setup is not finished.</string>
+    <string name="intensity_gentle">Gentle</string>
+    <string name="intensity_medium">Medium</string>
+    <string name="intensity_strong">Strong</string>
+
+    <!-- Settings (T074) -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_intensity_heading">Dull level</string>
+    <string name="settings_ramp_heading">Soft Landing</string>
+    <string name="ramp_one_minute">1 minute</string>
+    <string name="ramp_two_minutes">2 minutes</string>
+    <string name="settings_vpn_heading">VPN</string>
+    <string name="settings_vpn_stop">Stop VPN dulling</string>
+    <string name="settings_vpn_start">Start VPN dulling</string>
+    <string name="settings_vpn_android_note">Android’s own VPN settings can still turn the VPN off. The Kids Garden PIN does not protect them.</string>
+    <string name="settings_change_pin">Change PIN</string>
+    <string name="settings_limitations">Limitations</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="settings_enable_call_pause">Enable call pause</string>
+
+    <!-- Change PIN (T075) -->
+    <string name="change_pin_title">Change PIN</string>
+    <string name="pin_current_label">Current PIN</string>
+    <string name="pin_new_label">New PIN</string>
+    <string name="change_pin_save">Save new PIN</string>
+
+    <!-- Limitations and privacy (T076) -->
+    <string name="limitations_title">Limitations</string>
+    <string name="limit_no_control">Kids Garden does not control the whole phone and does not block apps. It slows the internet.</string>
+    <string name="limit_best_effort">Slowing is best effort. Downloaded or saved content, and apps that work offline, are not slowed.</string>
+    <string name="limit_other_vpn">If another VPN app is turned on, Kids Garden cannot slow the internet until that VPN is turned off.</string>
+    <string name="limit_forgot_pin">Forgot the PIN? Clear Kids Garden’s storage in Android settings, or reinstall it, and then set it up again.</string>
+    <string name="limit_future">Stronger protection that is harder to remove is planned for a future version.</string>
+    <string name="privacy_screen_title">Privacy</string>
+    <string name="privacy_no_logs">Kids Garden keeps no logs and does not record websites, messages, videos, or apps used.</string>
 
     <!-- Parent Mode status (T055); no timer -->
     <string name="parent_mode_title">Parent Mode</string>

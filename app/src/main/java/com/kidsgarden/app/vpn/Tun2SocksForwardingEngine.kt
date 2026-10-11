@@ -1,5 +1,6 @@
 package com.kidsgarden.app.vpn
 
+import android.os.SystemClock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -39,7 +40,12 @@ class Tun2SocksForwardingEngine : ForwardingEngine {
         stop()
         if (!NativeTunnel.available) return@withContext EngineStartResult.Failed(EngineFailure.NATIVE_LIBRARY_MISSING)
 
-        val newScheduler = TrafficShapingScheduler(initial, configuration.maxQueuedBytes, configuration.maxFlows)
+        val newScheduler = TrafficShapingScheduler(
+            initial,
+            configuration.maxQueuedBytes,
+            configuration.maxFlows,
+            elapsedRealtimeMillis = SystemClock::elapsedRealtime,
+        )
         val probeSeen = CompletableDeferred<Unit>()
         val newRelay = LocalSocksRelay(newScheduler, protector, dns) { probeSeen.complete(Unit) }
         try {
@@ -89,8 +95,8 @@ class Tun2SocksForwardingEngine : ForwardingEngine {
         EngineStartResult.Running
     }
 
-    override fun apply(profile: ThrottleProfile, generation: Long): Boolean =
-        synchronized(lock) { scheduler }?.apply(profile, generation) ?: false
+    override fun apply(profile: ThrottleProfile, generation: Long, guard: PolicyGuard?): Boolean =
+        synchronized(lock) { scheduler }?.apply(profile, generation, guard) ?: false
 
     override fun stop() {
         val (oldRelay, oldThread) = synchronized(lock) {

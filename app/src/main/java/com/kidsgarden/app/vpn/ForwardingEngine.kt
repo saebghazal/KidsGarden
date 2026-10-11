@@ -61,12 +61,25 @@ interface ForwardingEngine {
         onFailure: (EngineFailure) -> Unit,
     ): EngineStartResult
 
-    /** Applies [profile] unless [generation] is stale. */
-    fun apply(profile: ThrottleProfile, generation: Long): Boolean
+    /**
+     * Applies [profile] unless [generation] is stale. With a [guard], the packet path
+     * switches to the guard's fallback once its deadline passes, without waiting for a
+     * newer policy.
+     */
+    fun apply(profile: ThrottleProfile, generation: Long, guard: PolicyGuard? = null): Boolean
 
     /** Idempotent. Closes sockets and clears buffers and flow maps. */
     fun stop()
 }
+
+/**
+ * Deadline for a relaxed policy, in elapsed-realtime milliseconds (counts deep sleep).
+ * After it, traffic is shaped with [fallback].
+ */
+data class PolicyGuard(
+    val validUntilElapsedMillis: Long,
+    val fallback: ThrottleProfile,
+)
 
 /** Addresses inside the TUN. 198.18.0.0/15 is reserved for benchmarking (RFC 2544). */
 object TunnelAddresses {

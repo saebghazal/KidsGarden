@@ -16,7 +16,7 @@ class SessionManagerTest {
 
     private class RecordingSink : NetworkPolicySink {
         val applied = mutableListOf<Pair<NetworkPolicy, Long>>()
-        override suspend fun apply(policy: NetworkPolicy, generation: Long) {
+        override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) {
             applied += policy to generation
         }
     }

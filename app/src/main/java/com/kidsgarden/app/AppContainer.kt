@@ -1,10 +1,10 @@
 package com.kidsgarden.app
 
 import android.content.Context
+import com.kidsgarden.app.calls.TelephonyCallStateMonitor
 import com.kidsgarden.app.data.DataStoreProvider
 import com.kidsgarden.app.data.SettingsDocument
 import com.kidsgarden.app.data.SettingsRepository
-import com.kidsgarden.app.domain.BoundaryScheduler
 import com.kidsgarden.app.domain.DomainEvent
 import com.kidsgarden.app.domain.DullIntensity
 import com.kidsgarden.app.domain.SessionManager
@@ -16,6 +16,7 @@ import com.kidsgarden.app.receivers.DeviceEventCoordinator
 import com.kidsgarden.app.security.ParentPinManager
 import com.kidsgarden.app.security.PinHasher
 import com.kidsgarden.app.vpn.AndroidVpnServiceLauncher
+import com.kidsgarden.app.vpn.ServiceBoundaryScheduler
 import com.kidsgarden.app.vpn.Tun2SocksForwardingEngine
 import com.kidsgarden.app.vpn.VpnDullingController
 import kotlinx.coroutines.CoroutineScope
@@ -26,8 +27,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
 /**
@@ -61,11 +65,17 @@ class AppContainer(context: Context) {
         selectedIntensity = { _settings.value?.dullIntensity ?: DullIntensity.MEDIUM },
     )
 
-    val sessionManager = SessionManager(
+    /** Normal phone calls only (T061). Started at process start; restarts when permission changes. */
+    val callMonitor = TelephonyCallStateMonitor(appContext, time)
+
+    val sessionManager: SessionManager = SessionManager(
         time = time,
         policySink = vpnController,
-        boundaryScheduler = NoBoundariesYet,
+        boundaryScheduler = ServiceBoundaryScheduler { generation ->
+            sessionManager.dispatch(DomainEvent.DeadlineObserved(generation))
+        },
         scope = appScope,
+        callSource = callMonitor,
     )
 
     /** Screen-off, unlock, and sampled lock state, reported as domain events (T056). */
@@ -79,7 +89,28 @@ class AppContainer(context: Context) {
         scope = appScope,
     )
 
+    /**
+     * After boot or an app update, restores VPN dulling if the parent left it on and Android
+     * still has consent (T082). Restores protection only: authorization stays DULL with no
+     * grant, whatever was stored. Bounded so it fits a broadcast's time budget.
+     */
+    fun recoverProtection(onDone: () -> Unit) {
+        appScope.launch {
+            try {
+                withTimeoutOrNull(RECOVERY_BUDGET_MS) {
+                    val document = settings.filterNotNull().first()
+                    if (document.vpnDullingEnabled && document.setup.onboardingComplete) {
+                        vpnController.requestStart()
+                    }
+                }
+            } finally {
+                onDone()
+            }
+        }
+    }
+
     init {
+        vpnController.onCapabilityLost = { reason -> deviceEvents.vpnLost(reason) }
         deviceEvents.start()
         appScope.launch {
             var first = true
@@ -98,6 +129,13 @@ class AppContainer(context: Context) {
                     sessionManager.dispatch(DomainEvent.SettingsChanged(document.toDomainSettings()))
                 }
         }
+        callMonitor.start()
+        appScope.launch {
+            callMonitor.observations.collect { sessionManager.dispatch(DomainEvent.CallAggregateChanged(it)) }
+        }
+        appScope.launch {
+            callMonitor.capability.collect { sessionManager.dispatch(DomainEvent.CallCapabilityChanged(it)) }
+        }
         appScope.launch {
             vpnController.capability
                 .map { it.capability }
@@ -106,9 +144,7 @@ class AppContainer(context: Context) {
         }
     }
 
-    /** Placeholder until ServiceBoundaryScheduler exists (T060); no grants exist before then. */
-    private object NoBoundariesYet : BoundaryScheduler {
-        override fun schedule(atElapsedMillis: Long, generation: Long) = Unit
-        override fun cancel() = Unit
+    private companion object {
+        const val RECOVERY_BUDGET_MS = 8_000L
     }
 }

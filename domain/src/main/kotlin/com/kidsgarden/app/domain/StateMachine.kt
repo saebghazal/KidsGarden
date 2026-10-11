@@ -10,19 +10,28 @@ data class ReduceResult(
  * The single transition function (Constitution IV, contracts/state-machine.md).
  * Pure: no Android, storage, or VPN access; time arrives as a [TimeSnapshot].
  *
- * Foundational transitions (T015), DULL/capability (T045), and Parent Mode (T051). Story
- * tasks add the rest: child grants and call pause (T058, T059), Soft Landing (T070),
- * settings effects (T077).
+ * Foundational transitions (T015), DULL/capability (T045), Parent Mode (T051), child
+ * grants (T058), telephony pause (T059), Soft Landing stages (T070), and settings effects
+ * (T077).
  */
 object StateMachine {
 
     fun reduce(state: AuthorizationState, event: DomainEvent, time: TimeSnapshot): ReduceResult {
+        val e = time.elapsedMillis
         // Invalidity is resolved before any other event can act on stale state.
         val grant = state.childGrant
-        if (grant != null && grant.consumedMillis(time.elapsedMillis) == null) {
+        if (grant != null && grant.consumedMillis(e) == null) {
             return revokeToDull(state)
         }
+        // Time is settled first: a grant that reached a boundary while nothing was watching
+        // (sleep, missed wake-up) changes mode or expires before the event is handled.
+        val settled = settleGrant(state, e)
+        val handled = handle(settled.state, event, time)
+        return ReduceResult(handled.state, settled.effects + handled.effects)
+    }
 
+    private fun handle(state: AuthorizationState, event: DomainEvent, time: TimeSnapshot): ReduceResult {
+        val e = time.elapsedMillis
         return when (event) {
             DomainEvent.ProcessStarted,
             DomainEvent.RebootObserved,
@@ -32,17 +41,25 @@ object StateMachine {
 
             DomainEvent.PinVerified -> issueParentAccess(state)
 
+            DomainEvent.PinChanged -> revokeToDull(state)
+
+            // Grants end first; the parent stays in Settings to finish stopping the VPN.
+            DomainEvent.VpnStopRequested ->
+                if (state.mode == AuthorizationMode.DULL) unchanged(state) else expireToDull(state)
+
             DomainEvent.ParentUiLeft -> clearParentAccess(state)
 
             is DomainEvent.SettingsChanged -> settingsChanged(state, event.settings)
 
-            is DomainEvent.CallCapabilityChanged -> publish(state.copy(callCapability = event.capability))
+            is DomainEvent.CallCapabilityChanged -> callCapabilityChanged(state, event.capability, e)
 
             is DomainEvent.InteractivityObserved ->
                 if (event.interactiveAndUnlocked) unchanged(state.copy(interactiveAndUnlocked = true))
                 else screenOffOrLocked(state)
 
             is DomainEvent.StartParentRequested -> startParent(state, event.grantPermission)
+
+            is DomainEvent.StartChildRequested -> startChild(state, event.grantPermission, event.durationMinutes, time)
 
             DomainEvent.ScreenOff,
             DomainEvent.DeviceLocked -> screenOffOrLocked(state)
@@ -54,11 +71,14 @@ object StateMachine {
 
             is DomainEvent.VpnCapabilityChanged -> vpnCapabilityChanged(state, event.capability)
 
+            is DomainEvent.CallAggregateChanged -> callObserved(state, event.observation, e, fresh = false)
+
+            is DomainEvent.CallReconciled -> callObserved(state, event.observation, e, fresh = true)
+
+            is DomainEvent.DeadlineObserved -> deadlineObserved(state, event.boundaryGeneration, e)
+
             DomainEvent.PinRejected,
             DomainEvent.UiOpened,
-            is DomainEvent.StartChildRequested,
-            is DomainEvent.CallAggregateChanged,
-            is DomainEvent.DeadlineObserved,
             DomainEvent.SettingsWriteSucceeded,
             DomainEvent.SettingsWriteFailed -> unchanged(state)
         }
@@ -66,11 +86,7 @@ object StateMachine {
 
     /** Policy for DULL: the selected profile when shaping works, otherwise Unavailable. */
     fun dullPolicy(state: AuthorizationState): NetworkPolicy =
-        if (state.vpnCapability == VpnCapability.RUNNING) {
-            NetworkPolicy.Dull(state.settings.dullIntensity)
-        } else {
-            NetworkPolicy.Unavailable(REASON_VPN_UNAVAILABLE)
-        }
+        DullModePolicy.policyFor(state.copy(mode = AuthorizationMode.DULL, childGrant = null), 0L)
 
     /** Process start, reboot, or update: DULL with no grant or tokens (FR-027). */
     private fun restart(state: AuthorizationState): ReduceResult {
@@ -81,6 +97,7 @@ object StateMachine {
             vpnCapability = state.vpnCapability,
             callCapability = state.callCapability,
             callState = state.callState,
+            callMonitorGeneration = state.callMonitorGeneration,
             interactiveAndUnlocked = state.interactiveAndUnlocked,
         )
         return ReduceResult(next, dullEffects(next))
@@ -91,10 +108,32 @@ object StateMachine {
         val next = state.copy(
             mode = AuthorizationMode.DULL,
             childGrant = null,
+            rampStage = null,
             parentAccess = null,
             generation = state.generation + 1,
         )
         return ReduceResult(next, dullEffects(next))
+    }
+
+    /**
+     * The grant ran out, or the parent ended it from Settings: discard it and return to DULL.
+     * Unlike a revocation, a parent in the parent interface stays there.
+     */
+    private fun expireToDull(state: AuthorizationState): ReduceResult {
+        val next = state.copy(
+            mode = AuthorizationMode.DULL,
+            childGrant = null,
+            rampStage = null,
+            generation = state.generation + 1,
+        )
+        return ReduceResult(
+            next,
+            listOf(
+                Effect.CancelBoundary(next.generation),
+                Effect.ApplyNetworkPolicy(dullPolicy(next), next.generation),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
     }
 
     private fun dullEffects(state: AuthorizationState): List<Effect> = listOf(
@@ -154,6 +193,7 @@ object StateMachine {
         val next = state.copy(
             mode = AuthorizationMode.PARENT_MODE,
             childGrant = null,
+            rampStage = null,
             parentAccess = access.copy(grantPermission = null),
             generation = state.generation + 1,
         )
@@ -184,6 +224,154 @@ object StateMachine {
         return unchanged(unlocked)
     }
 
+    /**
+     * Child play (T058). Exactly 10, 20, or 30 minutes with the fresh one-use permission and
+     * the same prerequisites as Parent Mode. Captures the current intensity and ramp length,
+     * replaces any existing grant (no stacking), and clears parent access in the same step.
+     * Started during a phone call, the grant begins paused with its full duration.
+     */
+    private fun startChild(state: AuthorizationState, permission: Long, minutes: Int, time: TimeSnapshot): ReduceResult {
+        val access = state.parentAccess ?: return unchanged(state)
+        val eligible = minutes in CHILD_DURATIONS_MINUTES &&
+            access.grantPermission == permission &&
+            state.interactiveAndUnlocked &&
+            state.setupComplete &&
+            state.vpnCapability == VpnCapability.RUNNING
+        if (!eligible) return unchanged(state)
+        val e = time.elapsedMillis
+        val grant = ChildGrant(
+            durationMillis = minutes * MILLIS_PER_MINUTE,
+            rampMillis = state.settings.softLandingDurationSeconds * MILLIS_PER_SECOND,
+            startElapsedMillis = e,
+            startEpochMillis = time.epochMillis,
+            target = state.settings.dullIntensity,
+            pauseStartElapsedMillis = if (state.callState == CallSourceState.ACTIVE) e else null,
+        )
+        val next = state.copy(
+            mode = AuthorizationMode.CHILD_PLAY_SESSION,
+            childGrant = grant,
+            rampStage = null,
+            parentAccess = null,
+            generation = state.generation + 1,
+        )
+        return ReduceResult(
+            next,
+            listOfNotNull(
+                Effect.ClearParentUiAccess(next.generation),
+                grantPolicyEffect(next, e),
+                boundaryEffect(next, e),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /**
+     * Moves a grant to the mode its consumed play implies at [e]. C >= D discards the grant
+     * (DULL). Paused grants have frozen play, so they never move here.
+     */
+    private fun settleGrant(state: AuthorizationState, e: Long): ReduceResult {
+        val grant = state.childGrant ?: return unchanged(state)
+        val mode = grant.modeAt(e) ?: return revokeToDull(state)
+        if (mode == AuthorizationMode.DULL) return expireToDull(state)
+        val stage = if (mode == AuthorizationMode.SOFT_LANDING) grant.rampStageAt(e) else null
+        // A late wake that skipped stages lands directly on the current one.
+        if (mode == state.mode && stage == state.rampStage) return unchanged(state)
+        val next = state.copy(mode = mode, rampStage = stage)
+        return ReduceResult(
+            next,
+            listOfNotNull(
+                grantPolicyEffect(next, e),
+                boundaryEffect(next, e),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /** Network intent for the current grant: Normal during play, the staged ramp after. */
+    private fun grantPolicy(state: AuthorizationState, e: Long): NetworkPolicy = DullModePolicy.policyFor(state, e)
+
+    /** The grant's policy, valid only until its next boundary. */
+    private fun grantPolicyEffect(state: AuthorizationState, e: Long): Effect =
+        Effect.ApplyNetworkPolicy(grantPolicy(state, e), state.generation, state.childGrant?.nextBoundaryElapsed(e))
+
+    /**
+     * While paused the current policy is kept, valid until the mandatory checkpoint plus a
+     * grace period for the fresh query. Only a fresh ACTIVE result extends it again.
+     */
+    private fun pausedPolicy(state: AuthorizationState, e: Long): ReduceResult {
+        val checkpoint = state.childGrant?.nextBoundaryElapsed(e)
+        val validUntil = checkpoint?.let { if (it > Long.MAX_VALUE - CHECKPOINT_GRACE_MILLIS) null else it + CHECKPOINT_GRACE_MILLIS }
+        return ReduceResult(
+            state,
+            listOfNotNull(
+                Effect.ApplyNetworkPolicy(grantPolicy(state, e), state.generation, validUntil ?: checkpoint),
+                checkpoint?.let { Effect.ScheduleBoundary(it, state.generation) },
+                Effect.PublishParentStatus(state.generation),
+            ),
+        )
+    }
+
+    private fun boundaryEffect(state: AuthorizationState, e: Long): Effect? =
+        state.childGrant?.nextBoundaryElapsed(e)?.let { Effect.ScheduleBoundary(it, state.generation) }
+
+    /**
+     * A scheduled boundary fired. Mode changes were already settled. While paused this is
+     * the mandatory checkpoint: only a fresh query ([DomainEvent.CallReconciled]) can keep
+     * the pause, so cached ACTIVE state never renews it.
+     */
+    private fun deadlineObserved(state: AuthorizationState, boundaryGeneration: Long, e: Long): ReduceResult {
+        if (boundaryGeneration != state.generation) return unchanged(state)
+        val grant = state.childGrant ?: return unchanged(state)
+        if (grant.isPaused) return ReduceResult(state, listOf(Effect.ReconcileCalls(state.generation)))
+        return ReduceResult(state, listOfNotNull(boundaryEffect(state, e)))
+    }
+
+    /**
+     * Telephony pause (T059). ACTIVE on an unexpired grant opens one union pause; repeats add
+     * nothing. INACTIVE or UNAVAILABLE closes it once. Only a fresh query renews an open
+     * pause, and then only until the next projected boundary. The scheduled boundary is
+     * never cancelled by a pause. Stale monitor generations are ignored.
+     */
+    private fun callObserved(state: AuthorizationState, observation: CallObservation, e: Long, fresh: Boolean): ReduceResult {
+        if (observation.monitorGeneration < state.callMonitorGeneration) return unchanged(state)
+        val recorded = state.copy(callState = observation.state, callMonitorGeneration = observation.monitorGeneration)
+        val grant = recorded.childGrant ?: return unchanged(recorded)
+        return when (observation.state) {
+            CallSourceState.ACTIVE ->
+                if (grant.isPaused) {
+                    if (fresh) pausedPolicy(recorded, e) else unchanged(recorded)
+                } else {
+                    val paused = grant.pausedAt(e) ?: return revokeToDull(recorded)
+                    pausedPolicy(recorded.copy(childGrant = paused), e)
+                }
+            CallSourceState.INACTIVE,
+            CallSourceState.UNAVAILABLE ->
+                if (grant.isPaused) closePause(recorded, e) else unchanged(recorded)
+        }
+    }
+
+    /** Losing call detection ends any open pause; countdown continues. */
+    private fun callCapabilityChanged(state: AuthorizationState, capability: CallDetectionCapability, e: Long): ReduceResult {
+        val recorded = state.copy(callCapability = capability)
+        if (capability != CallDetectionCapability.AVAILABLE && recorded.childGrant?.isPaused == true) {
+            return closePause(recorded.copy(callState = CallSourceState.UNAVAILABLE), e)
+        }
+        return publish(recorded)
+    }
+
+    private fun closePause(state: AuthorizationState, e: Long): ReduceResult {
+        val resumed = state.childGrant?.resumedAt(e) ?: return revokeToDull(state)
+        val next = state.copy(childGrant = resumed)
+        return ReduceResult(
+            next,
+            listOfNotNull(
+                grantPolicyEffect(next, e),
+                boundaryEffect(next, e),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
     /** A correct PIN opens the parent interface only; phone authorization is unchanged. */
     private fun issueParentAccess(state: AuthorizationState): ReduceResult {
         val access = ParentAccess(token = state.nextTokenId, grantPermission = state.nextTokenId + 1)
@@ -205,4 +393,13 @@ object StateMachine {
     private fun unchanged(state: AuthorizationState): ReduceResult = ReduceResult(state, emptyList())
 
     const val REASON_VPN_UNAVAILABLE = "vpn-unavailable"
+
+    /** The only durations a parent can give (FR-009). */
+    val CHILD_DURATIONS_MINUTES: Set<Int> = setOf(10, 20, 30)
+
+    private const val MILLIS_PER_MINUTE = 60_000L
+    private const val MILLIS_PER_SECOND = 1_000L
+
+    /** Time allowed for the checkpoint's fresh call query before a paused policy lapses. */
+    private const val CHECKPOINT_GRACE_MILLIS = 60_000L
 }

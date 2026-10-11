@@ -34,7 +34,9 @@ The tunnel upstream documents Android, dual stack, TCP/UDP, and MIT licensing. T
 
 **Rationale:** A tested user-space stack is preferable to inventing TCP retransmission, fragmentation, UDP mapping, and IPv6 support. A remote SOCKS server is prohibited; an embedded local relay is an implementation detail, not a product backend.
 
-**Conditions before production selection:** Pin source/submodule hashes, review transitive licenses, add socket-protection and runtime shaping hooks, disable DNS mapping, audit all diagnostics, measure flow/queue limits and Normal overhead. No native library has been downloaded, built, approved, or vendored during planning.
+**Conditions before production selection:** Pin source/submodule hashes, review transitive licenses, add socket-protection and runtime shaping hooks, disable DNS mapping, audit all diagnostics, measure flow/queue limits and Normal overhead.
+
+**Recorded evidence (2026-10-11, T040/T093):** Source audited and pinned to upstream commit `07bea57` with submodule hashes and licenses (MIT, lwIP BSD-3-Clause) in [forwarding-engine-selection.md](evidence/forwarding-engine-selection.md). Socket protection and shaping live in the Kotlin relay; mapped DNS is never configured; the config is passed in memory. Still unmet: the submodule is not yet added to the repository, nothing is built, and flow/queue limits and Normal overhead are unmeasured ([vpn-feasibility.md](evidence/vpn-feasibility.md), status NOT RUN).
 
 **Alternatives considered:** Reading/sleeping/dropping TUN packets fails connectivity. A home-grown full stack exceeds V1 scope. Go/gVisor tun2socks adds embedding/runtime work and its listed primary platforms do not establish Android readiness. [Alternative upstream](https://github.com/xjasonlyu/tun2socks)
 
@@ -43,6 +45,8 @@ The tunnel upstream documents Android, dual stack, TCP/UDP, and MIT licensing. T
 **Decision:** Treat every native dependency as subject to the same no-logs/no-content rule. Disable/remove mapped DNS, name-based proxying, packet capture, traffic metrics export, and direct stdout/stderr output, including error branches.
 
 **Evidence:** The tunnel has configurable logger output, but configuration errors also print directly to stderr; turning logging “off” is not alone sufficient. [Logger](https://raw.githubusercontent.com/heiher/hev-socks5-tunnel/main/src/misc/hev-logger.c), [configuration code](https://raw.githubusercontent.com/heiher/hev-socks5-tunnel/main/src/hev-config.c), [mapdns configuration](https://raw.githubusercontent.com/heiher/hev-socks5-tunnel/main/conf/main.yml)
+
+**Recorded evidence (2026-10-11, T086/T093):** The upstream logger only writes when `log-file` is set, which Kids Garden never does; config and stack-overflow paths still call `fprintf(stderr)`, so the JNI bridge redirects stdout and stderr to `/dev/null` at load. `hev-debugger.c` compiles only with `ENABLE_DEBUG`, which is not defined. Runtime confirmation on a device is pending ([privacy-audit.md](evidence/privacy-audit.md)).
 
 **Rationale:** No app-generated debug logs means native error paths cannot be exceptions. Temporary numeric IP/port mappings and opaque buffers are necessary for forwarding, not retained destination history.
 

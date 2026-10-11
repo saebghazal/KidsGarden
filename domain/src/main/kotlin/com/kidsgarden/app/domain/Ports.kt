@@ -21,9 +21,13 @@ interface CallStateSource {
     suspend fun reconcile(): CallObservation
 }
 
-/** Applies network policy; implemented by VpnDullingController. */
+/**
+ * Applies network policy; implemented by VpnDullingController. [validUntilElapsedMillis]
+ * bounds a relaxed policy: after that elapsed time the engine must not keep forwarding
+ * under it, even if no newer policy has arrived.
+ */
 interface NetworkPolicySink {
-    suspend fun apply(policy: NetworkPolicy, generation: Long)
+    suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long? = null)
 }
 
 /** Read side of persisted parent settings. Writes go through the app's repository. */

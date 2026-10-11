@@ -16,6 +16,12 @@ sealed interface DomainEvent {
     data object PinVerified : DomainEvent
     data object PinRejected : DomainEvent
 
+    /** The new PIN was durably saved. Every grant and all parent access end. */
+    data object PinChanged : DomainEvent
+
+    /** The parent is turning VPN dulling off. Grants end before the VPN stops. */
+    data object VpnStopRequested : DomainEvent
+
     /** [grantPermission] must be the unused one-use permission issued on PIN entry. */
     data class StartParentRequested(val grantPermission: Long) : DomainEvent
     data class StartChildRequested(val grantPermission: Long, val durationMinutes: Int) : DomainEvent
@@ -26,6 +32,9 @@ sealed interface DomainEvent {
     data object UserPresent : DomainEvent
 
     data class CallAggregateChanged(val observation: CallObservation) : DomainEvent
+
+    /** Result of a fresh current-state query; the only observation that can renew a pause. */
+    data class CallReconciled(val observation: CallObservation) : DomainEvent
     data class CallCapabilityChanged(val capability: CallDetectionCapability) : DomainEvent
 
     /** A scheduled boundary (or any wake opportunity) fired; the reducer re-evaluates. */
@@ -81,9 +90,17 @@ sealed interface NetworkPolicy {
 sealed interface Effect {
     val generation: Long
 
-    data class ApplyNetworkPolicy(val policy: NetworkPolicy, override val generation: Long) : Effect
+    /** [validUntilElapsedMillis] is the next grant boundary for relaxed policies, else null. */
+    data class ApplyNetworkPolicy(
+        val policy: NetworkPolicy,
+        override val generation: Long,
+        val validUntilElapsedMillis: Long? = null,
+    ) : Effect
     data class ScheduleBoundary(val atElapsedMillis: Long, override val generation: Long) : Effect
     data class CancelBoundary(override val generation: Long) : Effect
     data class ClearParentUiAccess(override val generation: Long) : Effect
+
+    /** Query current call state now and report it as [DomainEvent.CallReconciled]. */
+    data class ReconcileCalls(override val generation: Long) : Effect
     data class PublishParentStatus(override val generation: Long) : Effect
 }
