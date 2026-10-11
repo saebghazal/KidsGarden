@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    All user-visible text for Kids Garden V1 (English only, NFR-008).
+    Exact wording required by the spec is marked; tests assert against these
+    resource IDs rather than duplicated literals.
+-->
+<resources>
+    <string name="app_name">Kids Garden</string>
+
+    <!-- PIN (FR-006, exact) -->
+    <string name="pin_mismatch">That PIN did not match. Try again.</string>
+
+    <!-- Capability and errors (contracts/parent-ui.md, exact) -->
+    <string name="vpn_limited">Dull Mode is limited until VPN setup is complete.</string>
+    <string name="call_limitation">Play time pauses during normal phone calls. Calls in other apps, such as WhatsApp, are not slowed down but do not pause play time.</string>
+    <string name="settings_save_failed">Settings could not be saved. Please try again.</string>
+    <string name="limits_uninstall">Kids Garden can be uninstalled or stopped through Android settings.</string>
+    <string name="privacy_summary">Settings stay on this phone. Kids Garden does not collect content, activity history, or logs.</string>
+
+    <!-- Foreground notification (FR-029, exact; no mode or session details) -->
+    <string name="notification_running">Kids Garden is running</string>
+    <string name="notification_channel_name">Kids Garden status</string>
+
+    <!-- Parent Mode (FR-008) -->
+    <string name="parent_mode_confirmation">Parent Mode is on. Locking the phone or turning off the screen ends it.</string>
+
+    <!-- Temporary entry route until setup and PIN screens exist (T038, T053) -->
+    <string name="entry_placeholder">Kids Garden</string>
+</resources>

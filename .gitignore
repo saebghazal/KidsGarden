@@ -1,0 +1,44 @@
+# Gradle / Android build output
+.gradle/
+build/
+out/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Machine-local configuration
+local.properties
+
+# Signing material: never commit (quickstart: keys stay outside the repo)
+*.jks
+*.keystore
+keystore.properties
+
+# IDE (project files under .idea/ that are shared stay tracked)
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/caches/
+.idea/libraries/
+.idea/shelf/
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.vscode/
+
+# Python tooling already present in this workspace
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.log
+.env*
