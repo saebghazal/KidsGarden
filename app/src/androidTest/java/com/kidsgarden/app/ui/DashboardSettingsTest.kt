@@ -212,12 +212,12 @@ class DashboardSettingsTest {
             nav = rememberNavController()
             NavHost(navController = nav, startDestination = Routes.PIN) {
                 composable(Routes.PIN) { Text("pin-marker") }
-                for (route in listOf(Routes.SETTINGS, Routes.DASHBOARD, Routes.CHANGE_PIN, Routes.LIMITATIONS, Routes.PRIVACY)) {
+                for (route in listOf(Routes.SETTINGS, Routes.DASHBOARD, Routes.CHANGE_PIN, Routes.LIMITATIONS, Routes.PRIVACY_INFO)) {
                     guardedComposable(route, { false }, { nav.closeProtectedRoutes() }) { Text("protected-marker") }
                 }
             }
         }
-        for (route in listOf(Routes.SETTINGS, Routes.DASHBOARD, Routes.CHANGE_PIN, Routes.LIMITATIONS, Routes.PRIVACY)) {
+        for (route in listOf(Routes.SETTINGS, Routes.DASHBOARD, Routes.CHANGE_PIN, Routes.LIMITATIONS, Routes.PRIVACY_INFO)) {
             compose.runOnIdle { nav.navigate(route) }
             compose.waitForIdle()
             compose.onAllNodesWithText("protected-marker").assertCountEquals(0)

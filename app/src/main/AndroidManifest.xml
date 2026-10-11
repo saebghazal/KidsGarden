@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Forward existing device traffic through protected sockets; no app telemetry or backend. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -42,11 +43,14 @@
             </intent-filter>
         </activity>
 
+        <!-- systemExempted is allowed for VPN apps the user enables in Settings > VPN.
+             Lint only knows the exact-alarm route; that permission is not needed here. -->
         <service
             android:name=".vpn.KidsGardenVpnService"
             android:exported="false"
             android:foregroundServiceType="systemExempted"
-            android:permission="android.permission.BIND_VPN_SERVICE">
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            tools:ignore="ForegroundServicePermission">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>

@@ -32,7 +32,12 @@ class SoftLandingPolicyTest {
             for (stage in 0 until SoftLandingPolicy.STAGES) {
                 val cap = SoftLandingPolicy.stageCapKbps(kbps, stage) ?: Double.POSITIVE_INFINITY
                 val added = SoftLandingPolicy.stageAddedRttMillis(rtt, stage)
-                assertTrue("$intensity stage $stage cap", cap < previousCap)
+                // Stage 0 is Normal (uncapped); every later stage tightens the cap.
+                if (stage == 0) {
+                    assertNull(SoftLandingPolicy.stageCapKbps(kbps, stage))
+                } else {
+                    assertTrue("$intensity stage $stage cap", cap < previousCap)
+                }
                 assertTrue("$intensity stage $stage rtt", added > previousRtt)
                 assertTrue(cap >= kbps)
                 assertTrue(added <= rtt)

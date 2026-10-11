@@ -3,6 +3,8 @@ package com.kidsgarden.app.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.DataStoreFactory
+import androidx.datastore.core.FileStorage
+import androidx.datastore.core.Storage
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import kotlinx.coroutines.CoroutineScope
 import java.io.File
@@ -30,10 +32,14 @@ object DataStoreProvider {
         return createForFile(File(context.noBackupFilesDir, FILE_NAME), scope)
     }
 
-    /** Also used by JVM tests with a temporary file. */
+    /** Also used by instrumented tests with a temporary file. */
     internal fun createForFile(file: File, scope: CoroutineScope): DataStore<SettingsDocument> =
+        createForStorage(FileStorage(SettingsDocumentSerializer) { file }, scope)
+
+    /** The same handler and migrations over any storage; JVM tests pass their own. */
+    internal fun createForStorage(storage: Storage<SettingsDocument>, scope: CoroutineScope): DataStore<SettingsDocument> =
         DataStoreFactory.create(
-            serializer = SettingsDocumentSerializer,
+            storage = storage,
             corruptionHandler = ReplaceFileCorruptionHandler {
                 // Whole-document reset to safe defaults (FR-026). No bytes are kept or logged.
                 repairedSinceStart = true
@@ -41,6 +47,5 @@ object DataStoreProvider {
             },
             migrations = SettingsMigrations.all,
             scope = scope,
-            produceFile = { file },
         )
 }

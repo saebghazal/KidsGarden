@@ -1,6 +1,7 @@
 package com.kidsgarden.app.calls
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.telephony.SubscriptionManager
@@ -144,6 +145,9 @@ class TelephonyCallStateMonitor(
         subscriptionListener = null
     }
 
+    // Both callers (start, reconcile) check READ_PHONE_STATE first and catch the
+    // SecurityException thrown if it is revoked in between.
+    @SuppressLint("MissingPermission")
     private fun activeSubscriptionIds(): List<Int> =
         subscriptions.activeSubscriptionInfoList.orEmpty().map { it.subscriptionId }
 

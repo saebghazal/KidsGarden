@@ -77,7 +77,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val CHANGE_PIN = "changePin"
     const val LIMITATIONS = "limitations"
-    const val PRIVACY = "privacy"
+    const val PRIVACY_INFO = "privacy"
 
     /** Inert confirmation after a child session starts; not protected, shows no controls. */
     const val CHILD_STARTED = "childStarted"
@@ -312,7 +312,7 @@ fun KidsGardenNavHost(
                 onStartVpn = { navController.navigate(Routes.VPN) },
                 onChangePin = { navController.navigate(Routes.CHANGE_PIN) },
                 onLimitations = { navController.navigate(Routes.LIMITATIONS) },
-                onPrivacy = { navController.navigate(Routes.PRIVACY) },
+                onPrivacy = { navController.navigate(Routes.PRIVACY_INFO) },
                 onEnableCallPause = { navController.navigate(Routes.PHONE_STATE) },
             )
         }
@@ -328,7 +328,7 @@ fun KidsGardenNavHost(
 
         guardedComposable(Routes.LIMITATIONS, accessActive, denied) { LimitationsScreen() }
 
-        guardedComposable(Routes.PRIVACY, accessActive, denied) { PrivacyScreen() }
+        guardedComposable(Routes.PRIVACY_INFO, accessActive, denied) { PrivacyScreen() }
 
         guardedComposable(Routes.CHILD_DURATION, accessActive, denied) {
             val childViewModel = viewModel {

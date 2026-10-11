@@ -1,7 +1,7 @@
 package com.kidsgarden.app.security
 
-import com.kidsgarden.app.data.DataStoreProvider
 import com.kidsgarden.app.data.SettingsRepository
+import com.kidsgarden.app.data.TestSettingsStores
 import com.kidsgarden.app.domain.TimeProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,7 +33,7 @@ class ParentPinManagerTest {
         val file = File(tmp.root, "settings.json")
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
-        val repo = SettingsRepository(DataStoreProvider.createForFile(file, scope))
+        val repo = SettingsRepository(TestSettingsStores.forFile(file, scope))
         return ParentPinManager(repo, PinHasher(), clock, hashDispatcher = dispatcher) to file
     }
 

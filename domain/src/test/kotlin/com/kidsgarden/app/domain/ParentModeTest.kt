@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.kidsgarden.app.domain
 
 import kotlinx.coroutines.CoroutineScope

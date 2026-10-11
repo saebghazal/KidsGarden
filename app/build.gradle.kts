@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -14,8 +16,8 @@ val hevSubmodule = file("src/main/cpp/hev-socks5-tunnel/Android.mk")
 // ~/.kidsgarden/signing.properties. Without it, release builds are produced unsigned.
 val signingPropertiesFile = (System.getenv("KIDSGARDEN_SIGNING_PROPERTIES")
     ?: "${System.getProperty("user.home")}/.kidsgarden/signing.properties").let(::File)
-val signingProperties = java.util.Properties().apply {
-    if (signingPropertiesFile.isFile) signingPropertiesFile.inputStream().use(::load)
+val signingProperties = Properties().apply {
+    if (signingPropertiesFile.isFile) signingPropertiesFile.inputStream().use { load(it) }
 }
 
 android {
@@ -110,6 +112,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // JVM tests on Windows: FileStorage cannot rename over an existing file there.
+    testImplementation(libs.androidx.datastore.core.okio)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
