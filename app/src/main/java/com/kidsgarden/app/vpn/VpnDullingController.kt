@@ -25,10 +25,14 @@ enum class VpnUnavailableReason {
     STOPPED,
 }
 
-/** Live capability. [reason] is set only while not RUNNING. */
+/**
+ * Live capability. [reason] is set only while not RUNNING; [exclusions] only while RUNNING.
+ * Neither carries package names, addresses, or traffic.
+ */
 data class VpnCapabilitySnapshot(
     val capability: VpnCapability,
     val reason: VpnUnavailableReason?,
+    val exclusions: ExclusionStatus? = null,
 )
 
 /** Starts the VPN service and checks live consent. Implemented with Android in the app. */
@@ -78,6 +82,17 @@ class VpnDullingController(
     @Volatile
     private var service: VpnServiceHandle? = null
 
+    /**
+     * Called whenever a running VPN stops for any reason (revoke, another VPN, user stop,
+     * engine failure). Lets the session end grants directly, so a quick stop-and-restart
+     * can never be missed by a conflated capability flow.
+     */
+    @Volatile
+    var onCapabilityLost: ((VpnUnavailableReason) -> Unit)? = null
+
+    @Volatile
+    private var exclusionStatus: ExclusionStatus? = null
+
     fun consentGranted(): Boolean = launcher.consentGranted()
 
     override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) {
@@ -95,17 +110,8 @@ class VpnDullingController(
      * rechecked here because it may have changed since the screen was drawn.
      */
     suspend fun start(): VpnCapabilitySnapshot {
-        val current = _capability.value
-        if (current.capability == VpnCapability.RUNNING) return current
-        if (!launcher.consentGranted()) return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.CONSENT_MISSING)
-        report(VpnCapability.STARTING, null)
-        try {
-            launcher.startService()
-        } catch (_: IllegalStateException) {
-            return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
-        } catch (_: SecurityException) {
-            return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
-        }
+        val requested = requestStart()
+        if (requested.capability != VpnCapability.STARTING) return requested
         val outcome = withTimeoutOrNull(startTimeoutMillis) {
             _capability.first { it.capability != VpnCapability.STARTING }
         }
@@ -114,6 +120,25 @@ class VpnDullingController(
             return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.START_TIMEOUT)
         }
         return outcome
+    }
+
+    /**
+     * Asks the service to start without waiting for the outcome, for entry points with a
+     * short time budget (boot, app update). The service reports the result itself.
+     */
+    fun requestStart(): VpnCapabilitySnapshot {
+        val current = _capability.value
+        if (current.capability == VpnCapability.RUNNING || current.capability == VpnCapability.STARTING) return current
+        if (!launcher.consentGranted()) return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.CONSENT_MISSING)
+        report(VpnCapability.STARTING, null)
+        return try {
+            launcher.startService()
+            _capability.value
+        } catch (_: IllegalStateException) {
+            report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
+        } catch (_: SecurityException) {
+            report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
+        }
     }
 
     /** Idempotent. Shuts the service down if it runs; otherwise just reports [reason]. */
@@ -133,7 +158,13 @@ class VpnDullingController(
     }
 
     /** The TUN exists; start forwarding. Returns false if the service must shut down. */
-    suspend fun onTunnelEstablished(tunFd: Int, protector: SocketProtector, dns: UpstreamDnsSource): Boolean {
+    suspend fun onTunnelEstablished(
+        tunFd: Int,
+        protector: SocketProtector,
+        dns: UpstreamDnsSource,
+        exclusions: ExclusionStatus = ExclusionStatus.NONE,
+    ): Boolean {
+        exclusionStatus = exclusions
         val initial = mutex.withLock { currentProfile() }
         val result = engine.start(EngineConfiguration(), tunFd, protector, dns, initial) { onEngineFailed() }
         return when (result) {
@@ -186,8 +217,15 @@ class VpnDullingController(
     }
 
     private fun report(capability: VpnCapability, reason: VpnUnavailableReason?): VpnCapabilitySnapshot {
-        val snapshot = VpnCapabilitySnapshot(capability, if (capability == VpnCapability.RUNNING) null else reason)
+        val running = capability == VpnCapability.RUNNING
+        val snapshot = VpnCapabilitySnapshot(
+            capability = capability,
+            reason = if (running) null else reason,
+            exclusions = if (running) exclusionStatus else null,
+        )
+        val wasRunning = _capability.value.capability == VpnCapability.RUNNING
         _capability.value = snapshot
+        if (wasRunning && !running) onCapabilityLost?.invoke(reason ?: VpnUnavailableReason.STOPPED)
         return snapshot
     }
 

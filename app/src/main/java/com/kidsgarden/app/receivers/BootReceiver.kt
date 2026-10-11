@@ -7,9 +7,12 @@ import com.kidsgarden.app.KidsGardenApplication
 import com.kidsgarden.app.domain.DomainEvent
 
 /**
- * Boot and app-update notifications (FR-027). Both only reaffirm DULL with no grant; the
- * process start itself already did so. No work beyond dispatching one event.
- * T082 extends recovery through permitted entry points.
+ * Boot and app-update recovery (T082, FR-027). Both reaffirm DULL with no grant; nothing
+ * about authorization is ever read from storage. Then, if the parent left VPN dulling on
+ * and consent still holds, the VPN restarts through this permitted entry point so the
+ * phone is dull again without the parent opening the app.
+ *
+ * Work is bounded: [AppContainer.recoverProtection] finishes within the broadcast budget.
  */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -18,6 +21,9 @@ class BootReceiver : BroadcastReceiver() {
             Intent.ACTION_MY_PACKAGE_REPLACED -> DomainEvent.PackageReplaced
             else -> return
         }
-        (context.applicationContext as KidsGardenApplication).container.sessionManager.dispatch(event)
+        val container = (context.applicationContext as KidsGardenApplication).container
+        container.sessionManager.dispatch(event)
+        val pending = goAsync()
+        container.recoverProtection { pending.finish() }
     }
 }

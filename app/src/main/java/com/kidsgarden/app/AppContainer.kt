@@ -27,8 +27,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 
 /**
@@ -86,7 +89,28 @@ class AppContainer(context: Context) {
         scope = appScope,
     )
 
+    /**
+     * After boot or an app update, restores VPN dulling if the parent left it on and Android
+     * still has consent (T082). Restores protection only: authorization stays DULL with no
+     * grant, whatever was stored. Bounded so it fits a broadcast's time budget.
+     */
+    fun recoverProtection(onDone: () -> Unit) {
+        appScope.launch {
+            try {
+                withTimeoutOrNull(RECOVERY_BUDGET_MS) {
+                    val document = settings.filterNotNull().first()
+                    if (document.vpnDullingEnabled && document.setup.onboardingComplete) {
+                        vpnController.requestStart()
+                    }
+                }
+            } finally {
+                onDone()
+            }
+        }
+    }
+
     init {
+        vpnController.onCapabilityLost = { reason -> deviceEvents.vpnLost(reason) }
         deviceEvents.start()
         appScope.launch {
             var first = true
@@ -118,5 +142,9 @@ class AppContainer(context: Context) {
                 .distinctUntilChanged()
                 .collect { sessionManager.dispatch(DomainEvent.VpnCapabilityChanged(it)) }
         }
+    }
+
+    private companion object {
+        const val RECOVERY_BUDGET_MS = 8_000L
     }
 }

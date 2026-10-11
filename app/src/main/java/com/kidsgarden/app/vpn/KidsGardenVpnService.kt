@@ -87,7 +87,9 @@ class KidsGardenVpnService : VpnService() {
             // Meteredness follows the underlying network instead of always "metered".
             .setMetered(false)
             .setConfigureIntent(openAppIntent())
-        CommunicationExclusions.apply(this, builder)
+        // Resolved fresh before every establish; only exclusions, never an allow-list.
+        val exclusions = CommunicationAppExclusions(AndroidCommunicationPackageResolver(this))
+            .apply(builder.asExclusionTarget())
         networkMonitor.network?.let { builder.setUnderlyingNetworks(arrayOf(it)) }
 
         val descriptor = try {
@@ -100,7 +102,7 @@ class KidsGardenVpnService : VpnService() {
         if (descriptor == null) return shutdown(VpnUnavailableReason.ESTABLISH_FAILED)
         tun = descriptor
 
-        if (!controller.onTunnelEstablished(descriptor.fd, protector, networkMonitor)) {
+        if (!controller.onTunnelEstablished(descriptor.fd, protector, networkMonitor, exclusions.status)) {
             shutdown(VpnUnavailableReason.ENGINE_FAILED)
         }
     }

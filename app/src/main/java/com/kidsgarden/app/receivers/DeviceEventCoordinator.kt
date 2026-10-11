@@ -7,6 +7,8 @@ import android.content.IntentFilter
 import android.os.PowerManager
 import com.kidsgarden.app.domain.DomainEvent
 import com.kidsgarden.app.domain.SessionManager
+import com.kidsgarden.app.domain.VpnCapability
+import com.kidsgarden.app.vpn.VpnUnavailableReason
 
 /**
  * Translates screen and lock observations into domain events (T056,
@@ -40,6 +42,15 @@ class DeviceEventCoordinator(
         appContext.registerReceiver(presentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), Context.RECEIVER_NOT_EXPORTED)
         registered = true
         sample()
+    }
+
+    /**
+     * A running VPN stopped: revoked by the user or system, replaced by another VPN app,
+     * stopped by the user, or failed. Reported directly so grants end even if capability
+     * returns before a flow collector runs. The reducer decides what it means.
+     */
+    fun vpnLost(@Suppress("UNUSED_PARAMETER") reason: VpnUnavailableReason) {
+        sessionManager.dispatch(DomainEvent.VpnCapabilityChanged(VpnCapability.UNAVAILABLE))
     }
 
     /** Reports the current screen and lock state. Unknown counts as locked. */
