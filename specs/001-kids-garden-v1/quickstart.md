@@ -86,7 +86,7 @@ Use [data-model.md](data-model.md) and [state-machine contract](contracts/state-
 | Parent Mode | Correct PIN → explicit parent action; use other app; screen off/lock/unlock | Normal during valid grant; DULL after lock; no timer |
 | Parent call | Start parent grant; incoming/outgoing call; end without revocation | Parent grant remains; no confirmation |
 | Parent lock during call | Repeat, deliberately screen off/lock | Parent grant revoked; call end cannot restore it; fixed package exclusions remain |
-| Child durations | Run 10/20/30 choices; repeat lock/unlock at least 10 times each OS | Lock alone never pauses/resets/extends time |
+| Child durations | Run 10, 60 and 120 minutes, and check the arrows stop at 10 and 120; repeat lock/unlock at least 10 times each OS | Lock alone never pauses/resets/extends time |
 | Child handoff | Start then press Back/reopen/notification/deep link | Parent controls immediately require fresh PIN |
 | Preserved child time | 30-minute grant, use 5 minutes, normal phone call for 25 minutes | 25 minutes remain at call end; resumes silently |
 | Overlap/missed calls | Dual-SIM or call-waiting overlap; separately test ringing-only/missed/declined | One union pause for phone calls; ringing-only has no credit |

@@ -29,9 +29,10 @@ Effects: PersistSettings (parent settings changes only; never authorization, ses
 | --- | --- | --- |
 | ProcessStarted, reboot, update | DULL with no tokens or grant (memory-only state starts empty; nothing is loaded) | No stale Normal authorization; apply Dull only when safe capability exists |
 | Ordinary UiOpened | Reconcile existing live state; no grant | PIN screen or setup; opening UI is not process restart |
+| UiOpened during PARENT_MODE, unlocked, no unused permission | Issue ParentAccess with a fresh one-use grant permission; mode unchanged | Parent actions without PIN; Normal unchanged |
 | Valid PIN | ParentAccess only | No policy change |
 | StartParent + fresh grant permission + unlocked + valid setup/capability | Commit PARENT_MODE in memory; consume grant permission | Normal after generation/interactive/capability recheck |
-| StartChild(10/20/30) + same prerequisites | One new grant; clear all ParentAccess as part of commit | Normal; brief noninteractive confirmation; protected back stack cleared |
+| StartChild(10–120, step 10) + same prerequisites | One new grant; clear all ParentAccess as part of commit | Normal; brief noninteractive confirmation; protected back stack cleared |
 | Invalid duration / stale permission / duplicate command | No new grant | Calm parent error, no extra duration |
 | ScreenOff or DeviceLocked | Parent mode/token revoked; child counts elapsed time unless validly call-paused | Dull intent for revoked parent; fixed package exclusions remain |
 | UserPresent | Revoke any surviving parent grant defensively; evaluate child accounting | DULL stays DULL; child/ramp continues only when valid |

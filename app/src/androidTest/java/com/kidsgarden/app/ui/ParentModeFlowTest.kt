@@ -14,7 +14,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kidsgarden.app.R
 import com.kidsgarden.app.domain.TimeProvider
 import com.kidsgarden.app.ui.dashboard.ParentActionScreen
-import com.kidsgarden.app.ui.dashboard.ParentModeScreen
 import com.kidsgarden.app.ui.pin.ParentPinContent
 import com.kidsgarden.app.ui.pin.ParentPinViewModel
 import org.junit.Assert.assertEquals
@@ -22,7 +21,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** PIN entry, parent actions, and the Parent Mode screen (T057). */
+/** PIN entry, parent actions, and Parent Mode exit (T057). */
 @RunWith(AndroidJUnit4::class)
 class ParentModeFlowTest {
 
@@ -124,9 +123,20 @@ class ParentModeFlowTest {
     @Test
     fun parentModeShowsLockCopyAndExitsWithoutPin() {
         var exits = 0
-        compose.setContent { ParentModeScreen(onExit = { exits++ }) }
+        compose.setContent {
+            ParentActionScreen(
+                protectionReady = true,
+                onUseAsParent = {},
+                onGiveToChild = {},
+                onSettings = {},
+                onVpnSetup = {},
+                onExitParentMode = { exits++ },
+            )
+        }
         compose.onNodeWithText(text(R.string.parent_mode_confirmation)).assertIsDisplayed()
         compose.onAllNodesWithText(text(R.string.pin_label)).assertCountEquals(0)
+        compose.onAllNodesWithText(text(R.string.action_use_as_parent)).assertCountEquals(0)
+        compose.onNodeWithText(text(R.string.action_give_to_child)).assertIsDisplayed()
         compose.onNodeWithText(text(R.string.parent_mode_exit)).performClick()
         assertEquals(1, exits)
     }

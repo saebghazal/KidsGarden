@@ -24,7 +24,7 @@ fun PinField(
 ) {
     OutlinedTextField(
         value = value,
-        onValueChange = { input -> onValueChange(input.filter { it in '0'..'9' }.take(ParentPinManager.PIN_LENGTH)) },
+        onValueChange = { input -> onValueChange(input.filter { it in '0'..'9' }.take(ParentPinManager.MAX_PIN_LENGTH)) },
         label = { Text(label) },
         singleLine = true,
         enabled = enabled,

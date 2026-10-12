@@ -110,7 +110,7 @@ Ordinary I/O failure on a settings write is reported to the parent and does not 
 
 **Evidence:** PBKDF2 SHA256 is Android-available for the target platforms; the work factor follows OWASP's PBKDF2 guidance. [SecretKeyFactory](https://developer.android.com/reference/javax/crypto/SecretKeyFactory), [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [MessageDigest](https://developer.android.com/reference/java/security/MessageDigest)
 
-**Rationale:** A hardened salted credential meets V1 without adding native hashing dependencies. Benchmark the weakest supported device; do not lower security silently to meet latency. A six-digit PIN remains low entropy if local data are extracted.
+**Rationale:** A hardened salted credential meets V1 without adding native hashing dependencies. Benchmark the weakest supported device; do not lower security silently to meet latency. A PIN of one to six digits is low entropy if local data are extracted, and a one-digit PIN can be guessed in at most ten tries (two retry delays); the owner accepted this for this version on 2026-10-12.
 
 **Backup decision:** `noBackupFilesDir` plus `allowBackup=false` and cloud/device-transfer exclusions. Validate OEM behavior. [Android backup](https://developer.android.com/identity/data/autobackup)
 

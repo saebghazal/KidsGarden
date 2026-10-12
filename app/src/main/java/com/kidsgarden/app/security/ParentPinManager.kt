@@ -22,7 +22,7 @@ sealed interface PinOutcome {
 /**
  * Enrollment, verification, and change of the parent PIN (contracts/parent-pin-manager.md).
  *
- * - Six ASCII digits only (FR-006).
+ * - One to six ASCII digits (FR-006).
  * - Five consecutive failures impose a 30-second delay measured in elapsed time. The
  *   counter lives in memory only: process death clears it, and nothing is persisted.
  * - Every PIN char array passed in is cleared before returning.
@@ -108,10 +108,12 @@ class ParentPinManager(
     }
 
     companion object {
-        const val PIN_LENGTH = 6
+        const val MIN_PIN_LENGTH = 1
+        const val MAX_PIN_LENGTH = 6
         const val MAX_CONSECUTIVE_FAILURES = 5
         const val RETRY_DELAY_MILLIS = 30_000L
 
-        fun isValidPin(pin: CharArray): Boolean = pin.size == PIN_LENGTH && pin.all { it in '0'..'9' }
+        fun isValidPin(pin: CharArray): Boolean =
+            pin.size in MIN_PIN_LENGTH..MAX_PIN_LENGTH && pin.all { it in '0'..'9' }
     }
 }

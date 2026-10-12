@@ -3,9 +3,11 @@ package com.kidsgarden.app.ui
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.NavHostController
@@ -37,16 +39,25 @@ class ChildSessionFlowTest {
     private fun minutes(n: Int) = context.resources.getQuantityString(R.plurals.child_duration_minutes, n, n)
 
     @Test
-    fun offersExactlyTenTwentyAndThirtyMinutes() {
+    fun arrowsStepTenMinutesBetweenTenAndOneHundredTwenty() {
         var chosen: Int? = null
         compose.setContent {
             ChildDurationScreen(state = ChildSessionViewModel.State.Choosing, onStart = { chosen = it })
         }
+        val up = compose.onNodeWithContentDescription(context.resources.getQuantityString(R.plurals.child_duration_increase, 10, 10))
+        val down = compose.onNodeWithContentDescription(context.resources.getQuantityString(R.plurals.child_duration_decrease, 10, 10))
         compose.onNodeWithText(minutes(10)).assertIsDisplayed()
-        compose.onNodeWithText(minutes(30)).assertIsDisplayed()
-        compose.onAllNodes(hasClickAction()).assertCountEquals(3)
-        compose.onNodeWithText(minutes(20)).performClick()
-        assertEquals(20, chosen)
+        down.assertIsNotEnabled()
+        up.performClick()
+        compose.onNodeWithText(minutes(20)).assertIsDisplayed()
+        repeat(10) { up.performClick() }
+        compose.onNodeWithText(minutes(120)).assertIsDisplayed()
+        up.assertIsNotEnabled()
+        down.performClick()
+        compose.onNodeWithText(minutes(110)).assertIsDisplayed()
+        assertEquals(null, chosen)
+        compose.onNodeWithText(context.getString(R.string.child_duration_start)).performClick()
+        assertEquals(110, chosen)
     }
 
     @Test

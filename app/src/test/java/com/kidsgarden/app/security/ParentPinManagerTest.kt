@@ -29,8 +29,8 @@ class ParentPinManagerTest {
 
     private val clock = Clock()
 
-    private fun TestScope.setup(): Pair<ParentPinManager, File> {
-        val file = File(tmp.root, "settings.json")
+    private fun TestScope.setup(name: String = "settings.json"): Pair<ParentPinManager, File> {
+        val file = File(tmp.root, name)
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(backgroundScope.coroutineContext + dispatcher)
         val repo = SettingsRepository(TestSettingsStores.forFile(file, scope))
@@ -48,12 +48,22 @@ class ParentPinManagerTest {
     }
 
     @Test
-    fun formatIsSixDigitsOnly() = runTest {
+    fun formatIsOneToSixDigits() = runTest {
         val (manager, _) = setup()
-        assertEquals(PinOutcome.InvalidFormat, manager.enroll(pin("12345"), pin("12345")))
+        assertEquals(PinOutcome.InvalidFormat, manager.enroll(pin(""), pin("")))
         assertEquals(PinOutcome.InvalidFormat, manager.enroll(pin("1234567"), pin("1234567")))
         assertEquals(PinOutcome.InvalidFormat, manager.enroll(pin("12345a"), pin("12345a")))
         assertEquals(PinOutcome.InvalidFormat, manager.enroll(pin("123456"), pin("123457")))
+    }
+
+    @Test
+    fun everyLengthFromOneToSixIsAccepted() = runTest {
+        for (candidate in listOf("7", "12", "123", "1234", "12345", "123456")) {
+            val (manager, _) = setup("settings-$candidate.json")
+            assertEquals(candidate, PinOutcome.Accepted, manager.enroll(pin(candidate), pin(candidate)))
+            assertEquals(candidate, PinOutcome.Accepted, manager.verify(pin(candidate)))
+            assertEquals(candidate, PinOutcome.Mismatch, manager.verify(pin("0")))
+        }
     }
 
     @Test
