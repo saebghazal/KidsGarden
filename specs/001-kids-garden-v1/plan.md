@@ -57,7 +57,7 @@ No violation requires justification. One wording note: Principle I and the V1 sc
 
 ### Gate register
 
-Updated 2026-10-11. "Written" means code and tests exist. JVM tests have run locally (see G-QUALITY); nothing has run on a device.
+Updated 2026-10-12. "Written" means code and tests exist. JVM tests have run locally, and the instrumented suite has run on one API 36 phone (see G-QUALITY).
 
 | Gate | Status | Required evidence / effect | Recorded evidence | Unmet |
 | --- | --- | --- | --- | --- |
@@ -66,7 +66,7 @@ Updated 2026-10-11. "Written" means code and tests exist. JVM tests have run loc
 | G-VPN | OPEN prototype | Actual local TCP/UDP/IPv4/IPv6 forwarding, protected sockets, reconnect, bounded memory; not a TUN skeleton. | Engine audited and pinned (`evidence/forwarding-engine-selection.md`); written: JNI bridge, loopback relay, shaping scheduler with deadline guard, controller reporting RUNNING only after a forwarding probe; `FailSafePolicyTest`, `VpnPolicyMapperTest`. | Submodule pinned and `libkg-tunnel.so` builds (16 KB aligned, JNI entry points exported); it has not run. Forwarding qualification not run (`evidence/vpn-feasibility.md`, T050). |
 | G-LIFECYCLE | OPEN qualification | Foreground type/consent eligibility, revoke, boot, process restart, user stop, second VPN; no startup promises without running service. | Written: systemExempted foreground service, `onRevoke`/failure shutdown that fails open, direct VPN-loss reporting, boot/update recovery gated on the saved preference and live consent; `RecoveryTest`. | Foreground eligibility, revoke, second VPN, boot recovery not observed on devices (T088). |
 | G-PRIVACY | OPEN audit | Kotlin/native error paths produce no app logs or retained content/destinations; backup exclusions; source/license audit; settings file contains no authorization/session fields. | Source and manifest audit clean (`evidence/privacy-audit.md`); written: `StoragePrivacyTest`; native stdout/stderr silenced. | Release classpath report, on-device backup/transfer check, runtime logcat check, and native packaging check not run (T086). |
-| G-QUALITY | OPEN validation | Unit/UI/manual suite and spec performance, battery, accessibility, English string-resource checks. | Written: domain, JVM and instrumented suites for every story, `AccessibilityTest`; all copy in `strings.xml` with no literal UI text found by search. Run locally 2026-10-11: `:domain:test` 117/117, `:app:testDebugUnitTest` 75/75, `:app:lintDebug` 0 errors, instrumented sources compile, `:app:assembleDebug` builds. | Instrumented suite not run on a device (T092). Performance, battery (T090), and user studies (T091) not done. |
+| G-QUALITY | OPEN validation | Unit/UI/manual suite and spec performance, battery, accessibility, English string-resource checks. | Written: domain, JVM and instrumented suites for every story, `AccessibilityTest`; all copy in `strings.xml` with no literal UI text found by search. Run 2026-10-12: `:domain:test` 120/120, `:app:testDebugUnitTest` 76/76, `:app:lintDebug` 0 errors, `:app:connectedDebugAndroidTest` 43/43 on Galaxy A73 (API 36); see [evidence/qa-results.md](evidence/qa-results.md). | No API 35 device run; quickstart scenario table not run (T092). Performance, battery (T090), and user studies (T091) not done. |
 
 ## Project Structure
 
