@@ -35,7 +35,12 @@ process (stop, revoke, restart from setup), so lwIP state must be released on ex
 
 The repository adds the source as a git submodule at
 `app/src/main/cpp/hev-socks5-tunnel`. The build compiles only the arm64-v8a and x86_64
-ABIs with `-Wl,-z,max-page-size=16384` (16 KB page compatible).
+ABIs with `-Wl,-z,max-page-size=16384` (16 KB page compatible). First local build
+(2026-10-11, NDK 28.2.13676358): every LOAD segment of `libkg-tunnel.so` is 0x4000 aligned
+and only `NativeTunnel.run` and `NativeTunnel.quit` are exported as JNI entry points.
+
+On Windows, the submodules' public headers are symlinks and need `core.symlinks=true` with
+Developer Mode (see quickstart.md); the build stops early with that instruction otherwise.
 
 ## Audit checklist
 

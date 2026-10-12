@@ -15,7 +15,7 @@ class ChildSessionTest {
 
     @Test
     fun eachDurationStartsWithFullTimeNormalAndNextBoundary() {
-        for (minutes in listOf(10, 20, 30)) {
+        for (minutes in 10..120 step 10) {
             val h = ReducerHarness()
             val start = h.clock.elapsed
             val result = h.startChild(minutes)
@@ -36,9 +36,9 @@ class ChildSessionTest {
     }
 
     @Test
-    fun onlyTenTwentyOrThirtyMinutes() {
+    fun onlyTenMinuteStepsFromTenToOneHundredTwenty() {
         val permission = h.pin()
-        for (minutes in listOf(0, 5, 15, 31, 60, -10)) {
+        for (minutes in listOf(0, 5, 15, 31, 65, 130, -10)) {
             h.send(DomainEvent.StartChildRequested(permission, minutes))
             assertEquals(AuthorizationMode.DULL, h.state.mode)
         }

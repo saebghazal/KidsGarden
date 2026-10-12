@@ -2,35 +2,49 @@
 
 ## Current repository status
 
-Updated 2026-10-11. The app and its tests are written for every user story (83 of 94 tasks), but **nothing has been compiled, run, or tested on a device**. Every gate in the [gate register](plan.md#gate-register) is still OPEN.
+Updated 2026-10-11. The app and its tests are written for every user story (86 of 94 tasks). The first local build on Windows passes:
 
-Before the first build:
+| Check | Result |
+| --- | --- |
+| `:domain:test` | 117 of 117 pass |
+| `:app:testDebugUnitTest` | 75 of 75 pass |
+| `:app:lintDebug` | 0 errors |
+| `:app:compileDebugAndroidTestKotlin` | compiles |
+| `:app:assembleDebug` | builds; `libkg-tunnel.so` packaged for arm64-v8a and x86_64, LOAD segments 16 KB aligned |
 
-1. Open the project in Android Studio and let it sync. This generates the Gradle wrapper (T001); take any version fixes it suggests.
-2. Add the audited forwarding engine (without it the app builds but reports the VPN as unavailable):
+**Nothing has run on a device yet**: the instrumented suite, forwarding qualification and every manual check are still pending, so every gate in the [gate register](plan.md#gate-register) is still OPEN.
 
-   ```powershell
-   git submodule add https://github.com/heiher/hev-socks5-tunnel.git app/src/main/cpp/hev-socks5-tunnel
-   cd app/src/main/cpp/hev-socks5-tunnel
-   git checkout 07bea57d20f71c9804055c2e2a0787d65a7277cb
-   git submodule update --init --recursive
-   ```
+### Getting the code on Windows
+
+The forwarding engine is a pinned git submodule (`app/src/main/cpp/hev-socks5-tunnel`, upstream `07bea57`) whose public headers are symlinks. Git on Windows checks symlinks out as one-line text files unless they are enabled, and the C build then fails. Turn on **Developer Mode** (Settings → System → For developers), then clone:
+
+```powershell
+git -c core.symlinks=true clone --recurse-submodules https://github.com/saebghazal/KidsGarden.git
+```
+
+For an existing clone whose submodules were checked out without symlinks:
+
+```powershell
+git submodule foreach --recursive "git config core.symlinks true && git checkout -- ."
+```
+
+The build stops early with this instruction if it finds the headers as text files. Without the submodule the app still builds and reports the VPN as unavailable.
 
 Only normal mobile/Telecom calls pause play; WhatsApp, the dialer and the default SMS/RCS app are excluded from dulling but never pause play. See [research R1](research.md#r1--scoped-v1-call-handling-telephony-only).
 
 ## Prerequisites
 
-- Android Studio with JDK 17 selected for Gradle.
-- SDK platforms/API 35 and 36; compile/target 36, min 35.
-- Planned Gradle 8.13 wrapper, AGP 8.11.1, Kotlin 2.2.21, matching compiler plugins and a locked compatible version catalog.
+- Android Studio. Gradle 8.13 runs on Java 17–23; `gradle/gradle-daemon-jvm.properties` asks for Java 21 because Android Studio bundles Java 25. Install a JDK 21 (for example via Android Studio's *Download JDK*).
+- SDK platform API 36 (compile/target 36, min 35) and NDK (Side by side) `28.2.13676358`, from Android Studio's SDK Manager.
+- Gradle 8.13 wrapper (committed), AGP 8.11.1, Kotlin 2.2.21, versions pinned in `gradle/libs.versions.toml`.
 - Two physical test phones covering Android 15/16, plus emulators for UI/edge cases.
 - A separate test caller and approved non-emergency calling fixtures. Do not place live emergency calls.
 - Controlled synthetic network fixtures outside the app; no production backend or real-child traffic capture.
-- Native toolchain only when the forwarding spike is selected; verify final libraries on 4 KB and 16 KB environments.
+- Verify the native library on 4 KB and 16 KB page-size environments.
 
-Use Android Studio's SDK configuration or local.properties locally; do not commit developer paths/signing keys.
+Use Android Studio's SDK configuration or local.properties locally (`sdk.dir=C\:/Users/<you>/AppData/Local/Android/Sdk`); do not commit developer paths/signing keys.
 
-## Build and automated checks (PowerShell, after implementation)
+## Build and automated checks (PowerShell)
 
 ```powershell
 Set-Location 'C:\A-Proj\KidsGarden'
@@ -72,7 +86,7 @@ Use [data-model.md](data-model.md) and [state-machine contract](contracts/state-
 | Parent Mode | Correct PIN → explicit parent action; use other app; screen off/lock/unlock | Normal during valid grant; DULL after lock; no timer |
 | Parent call | Start parent grant; incoming/outgoing call; end without revocation | Parent grant remains; no confirmation |
 | Parent lock during call | Repeat, deliberately screen off/lock | Parent grant revoked; call end cannot restore it; fixed package exclusions remain |
-| Child durations | Run 10/20/30 choices; repeat lock/unlock at least 10 times each OS | Lock alone never pauses/resets/extends time |
+| Child durations | Run 10, 60 and 120 minutes, and check the arrows stop at 10 and 120; repeat lock/unlock at least 10 times each OS | Lock alone never pauses/resets/extends time |
 | Child handoff | Start then press Back/reopen/notification/deep link | Parent controls immediately require fresh PIN |
 | Preserved child time | 30-minute grant, use 5 minutes, normal phone call for 25 minutes | 25 minutes remain at call end; resumes silently |
 | Overlap/missed calls | Dual-SIM or call-waiting overlap; separately test ringing-only/missed/declined | One union pause for phone calls; ringing-only has no credit |

@@ -1,5 +1,6 @@
 package com.kidsgarden.app.ui.navigation
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -33,7 +34,6 @@ import com.kidsgarden.app.permissions.rememberVpnPermissionLauncher
 import com.kidsgarden.app.ui.dashboard.DashboardScreen
 import com.kidsgarden.app.ui.dashboard.DashboardViewModel
 import com.kidsgarden.app.ui.dashboard.ParentActionScreen
-import com.kidsgarden.app.ui.dashboard.ParentModeScreen
 import com.kidsgarden.app.ui.pin.ParentPinScreen
 import com.kidsgarden.app.ui.pin.ParentPinViewModel
 import com.kidsgarden.app.ui.session.ChildDurationScreen
@@ -71,13 +71,12 @@ object Routes {
     const val VPN = "setup/vpn"
     const val PHONE_STATE = "setup/phoneStatePermission"
     const val ACTIONS = "actions"
-    const val PARENT_MODE = "parentMode"
     const val CHILD_DURATION = "childDuration"
     const val DASHBOARD = "dashboard"
     const val SETTINGS = "settings"
     const val CHANGE_PIN = "changePin"
     const val LIMITATIONS = "limitations"
-    const val PRIVACY = "privacy"
+    const val PRIVACY_INFO = "privacy"
 
     /** Inert confirmation after a child session starts; not protected, shows no controls. */
     const val CHILD_STARTED = "childStarted"
@@ -107,6 +106,7 @@ fun KidsGardenNavHost(
     val vpnCapability by container.vpnController.capability.collectAsStateWithLifecycle()
     val callCapability by container.callMonitor.capability.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val activity = LocalActivity.current
 
     // When parent access ends anywhere (lock, child start, PIN change), drop every
     // protected screen from the back stack so none can be restored.
@@ -166,12 +166,17 @@ fun KidsGardenNavHost(
             if (setup != null && !credentialPresent) {
                 LaunchedEffect(Unit) { navController.replaceAll(Routes.WELCOME) }
             }
+            // During Parent Mode, opening the app grants parent access without a PIN.
+            val parentModeAccess = snapshot.authorizationMode == AuthorizationMode.PARENT_MODE &&
+                snapshot.parentAccessActive
+            if (parentModeAccess) {
+                LaunchedEffect(Unit) { navController.replaceAll(Routes.ACTIONS) }
+            }
             val pinViewModel = viewModel { ParentPinViewModel(container.pinManager) }
             ParentPinScreen(viewModel = pinViewModel, time = container.time, onAccepted = {
                 openParentInterface(
                     when {
                         setup?.onboardingComplete != true -> Routes.NOTIFICATIONS
-                        session.state.value.authorizationMode == AuthorizationMode.PARENT_MODE -> Routes.PARENT_MODE
                         session.state.value.remainingPlayMillis != null -> Routes.DASHBOARD
                         else -> Routes.ACTIONS
                     },
@@ -257,9 +262,16 @@ fun KidsGardenNavHost(
                             val started = withTimeoutOrNull(START_CONFIRM_TIMEOUT_MS) {
                                 session.state.first { it.authorizationMode == AuthorizationMode.PARENT_MODE }
                             }
-                            if (started != null) navController.replaceAll(Routes.PARENT_MODE)
+                            // No confirmation screen: the app steps aside so the parent can
+                            // use the phone. Reopening it during Parent Mode needs no PIN.
+                            if (started != null) activity?.moveTaskToBack(true)
                         }
                     }
+                },
+                onExitParentMode = if (snapshot.authorizationMode == AuthorizationMode.PARENT_MODE) {
+                    { session.dispatch(DomainEvent.ManualParentExit) }
+                } else {
+                    null
                 },
                 onGiveToChild = { navController.navigate(Routes.CHILD_DURATION) },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
@@ -312,7 +324,7 @@ fun KidsGardenNavHost(
                 onStartVpn = { navController.navigate(Routes.VPN) },
                 onChangePin = { navController.navigate(Routes.CHANGE_PIN) },
                 onLimitations = { navController.navigate(Routes.LIMITATIONS) },
-                onPrivacy = { navController.navigate(Routes.PRIVACY) },
+                onPrivacy = { navController.navigate(Routes.PRIVACY_INFO) },
                 onEnableCallPause = { navController.navigate(Routes.PHONE_STATE) },
             )
         }
@@ -328,7 +340,7 @@ fun KidsGardenNavHost(
 
         guardedComposable(Routes.LIMITATIONS, accessActive, denied) { LimitationsScreen() }
 
-        guardedComposable(Routes.PRIVACY, accessActive, denied) { PrivacyScreen() }
+        guardedComposable(Routes.PRIVACY_INFO, accessActive, denied) { PrivacyScreen() }
 
         guardedComposable(Routes.CHILD_DURATION, accessActive, denied) {
             val childViewModel = viewModel {
@@ -348,11 +360,6 @@ fun KidsGardenNavHost(
                 delay(CHILD_CONFIRMATION_MS)
                 navController.replaceAll(Routes.PIN)
             }
-        }
-
-        guardedComposable(Routes.PARENT_MODE, accessActive, denied) {
-            // Exiting revokes Parent Mode and parent access; the gate then returns to the PIN.
-            ParentModeScreen(onExit = { session.dispatch(DomainEvent.ManualParentExit) })
         }
     }
 }

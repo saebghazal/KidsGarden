@@ -77,8 +77,9 @@ object StateMachine {
 
             is DomainEvent.DeadlineObserved -> deadlineObserved(state, event.boundaryGeneration, e)
 
+            DomainEvent.UiOpened -> uiOpened(state)
+
             DomainEvent.PinRejected,
-            DomainEvent.UiOpened,
             DomainEvent.SettingsWriteSucceeded,
             DomainEvent.SettingsWriteFailed -> unchanged(state)
         }
@@ -225,7 +226,18 @@ object StateMachine {
     }
 
     /**
-     * Child play (T058). Exactly 10, 20, or 30 minutes with the fresh one-use permission and
+     * Opening the app during Parent Mode opens the parent interface without a PIN: the
+     * phone has not locked since the PIN was entered, so the parent still holds it. A fresh
+     * one-use permission lets the parent hand the phone to a child from there.
+     */
+    private fun uiOpened(state: AuthorizationState): ReduceResult {
+        val inParentMode = state.mode == AuthorizationMode.PARENT_MODE && state.interactiveAndUnlocked
+        if (!inParentMode || state.parentAccess?.grantPermission != null) return unchanged(state)
+        return issueParentAccess(state)
+    }
+
+    /**
+     * Child play (T058). A duration from [CHILD_DURATIONS_MINUTES] with the fresh one-use permission and
      * the same prerequisites as Parent Mode. Captures the current intensity and ramp length,
      * replaces any existing grant (no stacking), and clears parent access in the same step.
      * Started during a phone call, the grant begins paused with its full duration.
@@ -395,7 +407,10 @@ object StateMachine {
     const val REASON_VPN_UNAVAILABLE = "vpn-unavailable"
 
     /** The only durations a parent can give (FR-009). */
-    val CHILD_DURATIONS_MINUTES: Set<Int> = setOf(10, 20, 30)
+    val CHILD_DURATIONS_MINUTES: Set<Int> = (10..120 step 10).toSet()
+
+    /** Step between offered child durations. */
+    const val CHILD_DURATION_STEP_MINUTES = 10
 
     private const val MILLIS_PER_MINUTE = 60_000L
     private const val MILLIS_PER_SECOND = 1_000L

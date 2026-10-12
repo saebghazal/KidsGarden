@@ -39,11 +39,11 @@
 
     <!-- Setup: create PIN (T035) -->
     <string name="create_pin_title">Create a parent PIN</string>
-    <string name="create_pin_body">Choose six digits. You will need this PIN to give the phone to your child or change settings.</string>
+    <string name="create_pin_body">Choose one to six digits. You will need this PIN to give the phone to your child or change settings.</string>
     <string name="pin_label">PIN</string>
     <string name="pin_confirm_label">Confirm PIN</string>
     <string name="pin_save">Save PIN</string>
-    <string name="pin_invalid_format">Use exactly six digits.</string>
+    <string name="pin_invalid_format">Use one to six digits.</string>
     <string name="pin_confirmation_mismatch">The two PINs do not match.</string>
     <string name="pin_already_created">A parent PIN already exists.</string>
 
@@ -77,6 +77,15 @@
         <item quantity="one">%1$d minute</item>
         <item quantity="other">%1$d minutes</item>
     </plurals>
+    <plurals name="child_duration_increase">
+        <item quantity="one">Add %1$d minute</item>
+        <item quantity="other">Add %1$d minutes</item>
+    </plurals>
+    <plurals name="child_duration_decrease">
+        <item quantity="one">Remove %1$d minute</item>
+        <item quantity="other">Remove %1$d minutes</item>
+    </plurals>
+    <string name="child_duration_start">Start play time</string>
     <string name="child_start_failed">Play time could not start. Please try again.</string>
     <string name="child_started">Play time has started.</string>
 
@@ -144,7 +153,6 @@
     <string name="privacy_screen_title">Privacy</string>
     <string name="privacy_no_logs">Kids Garden keeps no logs and does not record websites, messages, videos, or apps used.</string>
 
-    <!-- Parent Mode status (T055); no timer -->
-    <string name="parent_mode_title">Parent Mode</string>
+    <!-- Parent Mode exit (T055); no timer -->
     <string name="parent_mode_exit">Exit Parent Mode</string>
 </resources>

@@ -25,7 +25,7 @@ class SettingsRepositoryTest {
 
     private fun TestScope.repository(file: File = File(tmp.root, "settings.json")): SettingsRepository {
         val scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
-        return SettingsRepository(DataStoreProvider.createForFile(file, scope))
+        return SettingsRepository(TestSettingsStores.forFile(file, scope))
     }
 
     @Test

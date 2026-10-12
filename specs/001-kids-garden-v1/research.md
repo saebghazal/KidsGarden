@@ -36,7 +36,7 @@ The tunnel upstream documents Android, dual stack, TCP/UDP, and MIT licensing. T
 
 **Conditions before production selection:** Pin source/submodule hashes, review transitive licenses, add socket-protection and runtime shaping hooks, disable DNS mapping, audit all diagnostics, measure flow/queue limits and Normal overhead.
 
-**Recorded evidence (2026-10-11, T040/T093):** Source audited and pinned to upstream commit `07bea57` with submodule hashes and licenses (MIT, lwIP BSD-3-Clause) in [forwarding-engine-selection.md](evidence/forwarding-engine-selection.md). Socket protection and shaping live in the Kotlin relay; mapped DNS is never configured; the config is passed in memory. Still unmet: the submodule is not yet added to the repository, nothing is built, and flow/queue limits and Normal overhead are unmeasured ([vpn-feasibility.md](evidence/vpn-feasibility.md), status NOT RUN).
+**Recorded evidence (2026-10-11, T040/T093):** Source audited and pinned to upstream commit `07bea57` with submodule hashes and licenses (MIT, lwIP BSD-3-Clause) in [forwarding-engine-selection.md](evidence/forwarding-engine-selection.md). Socket protection and shaping live in the Kotlin relay; mapped DNS is never configured; the config is passed in memory. Since then the submodule is in the repository and the native library builds (2026-10-11). Still unmet: it has not run on a device, and flow/queue limits and Normal overhead are unmeasured ([vpn-feasibility.md](evidence/vpn-feasibility.md), status NOT RUN).
 
 **Alternatives considered:** Reading/sleeping/dropping TUN packets fails connectivity. A home-grown full stack exceeds V1 scope. Go/gVisor tun2socks adds embedding/runtime work and its listed primary platforms do not establish Android readiness. [Alternative upstream](https://github.com/xjasonlyu/tun2socks)
 
@@ -110,7 +110,7 @@ Ordinary I/O failure on a settings write is reported to the parent and does not 
 
 **Evidence:** PBKDF2 SHA256 is Android-available for the target platforms; the work factor follows OWASP's PBKDF2 guidance. [SecretKeyFactory](https://developer.android.com/reference/javax/crypto/SecretKeyFactory), [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [MessageDigest](https://developer.android.com/reference/java/security/MessageDigest)
 
-**Rationale:** A hardened salted credential meets V1 without adding native hashing dependencies. Benchmark the weakest supported device; do not lower security silently to meet latency. A six-digit PIN remains low entropy if local data are extracted.
+**Rationale:** A hardened salted credential meets V1 without adding native hashing dependencies. Benchmark the weakest supported device; do not lower security silently to meet latency. A PIN of one to six digits is low entropy if local data are extracted, and a one-digit PIN can be guessed in at most ten tries (two retry delays); the owner accepted this for this version on 2026-10-12.
 
 **Backup decision:** `noBackupFilesDir` plus `allowBackup=false` and cloud/device-transfer exclusions. Validate OEM behavior. [Android backup](https://developer.android.com/identity/data/autobackup)
 

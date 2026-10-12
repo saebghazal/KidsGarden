@@ -7,12 +7,12 @@
 | Screen | Access and behavior | Acceptance |
 | --- | --- | --- |
 | 1. First Setup | Unenrolled device only; welcome, local-only/no-content/no-logs, normal-app limits, create PIN | No account/factory reset; interrupt/resume without authorization |
-| 2. Create PIN | Six-digit numeric masked entry + confirmation; enrollment only when credential absent/invalid | Non-numeric or wrong length rejected; credential persisted securely before advancing; no raw PIN saved state |
+| 2. Create PIN | One-to-six-digit numeric masked entry + confirmation; enrollment only when credential absent/invalid | Non-numeric or wrong length rejected; credential persisted securely before advancing; no raw PIN saved state |
 | 3. VPN Setup | Enrolled parent gate; explanation before system consent, live status, limited capability reasons. Also hosts the explanation steps shown before the POST_NOTIFICATIONS and READ_PHONE_STATE prompts | No “protected” on saved flag or consent alone; denial calm |
 | 4. Parent PIN | Default enrolled app entry; volatile retry delay and calm wrong-PIN text | Correct PIN opens actions only; DULL unchanged |
-| 5. Parent Actions | Authenticated parent; Use phone as parent / Give phone to child / Settings | Fresh one-use grant permission for new grants |
-| 6. Parent Mode Status | Parent-only active indication, ends-on-lock explanation, manual exit, no timer | Switch to other apps preserves phone authorization while unlocked; reopening UI still gated |
-| 7. Give Phone To Child | Authenticated duration selection: 10/20/30 | Start atomically clears parent access; brief inert confirmation cannot expose Settings or stale back-stack routes |
+| 5. Parent Actions | Authenticated parent; Use phone as parent / Give phone to child / Settings. During PARENT_MODE: reached without PIN while unlocked; “Exit Parent Mode” (no PIN) replaces “Use phone as parent”, with ends-on-lock text | Fresh one-use grant permission for new grants |
+| 6. Parent Mode start | No window: once PARENT_MODE commits the app moves to the background; no timer | Switch to other apps preserves phone authorization while unlocked; reopening UI during PARENT_MODE shows route 5 without PIN; after lock the PIN is required |
+| 7. Give Phone To Child | Authenticated duration selection: up/down arrows, 10–120 minutes in 10-minute steps, then Start | Start atomically clears parent access; brief inert confirmation cannot expose Settings or stale back-stack routes |
 | 8. Dashboard | Authenticated; current mode, real VPN status, intensity, setup, remaining child play | During call pause show frozen parent-only remainder; never export history |
 | 9. Settings | Authenticated; PIN change, intensity, VPN controls, 60/120-second ramp, privacy/limits | Current PIN needed for PIN change; settings don't change current child target/deadlines except explicit new grant |
 | 10. V1 Limitations | Parent-facing explanatory route; includes privacy and local VPN explanation | No uninstall-proof/full-control/total-blocking/universal-call claim |

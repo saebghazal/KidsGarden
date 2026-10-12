@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -9,13 +11,25 @@ plugins {
 // is checked out; without it the app still builds and reports the VPN as unavailable.
 val hevSubmodule = file("src/main/cpp/hev-socks5-tunnel/Android.mk")
 
+// The submodules keep their public headers as symlinks. Git on Windows checks them out as
+// one-line text files unless symlinks are enabled, and the C build then fails with
+// hundreds of unrelated errors. Stop early with the fix instead.
+val hevLinkProbe = file("src/main/cpp/hev-socks5-tunnel/third-part/hev-task-system/include/hev-object.h")
+if (hevSubmodule.isFile && hevLinkProbe.isFile && hevLinkProbe.length() < 200) {
+    throw GradleException(
+        "hev-socks5-tunnel headers were checked out as text files, not symlinks. " +
+            "Enable Windows Developer Mode, then run: git submodule foreach --recursive " +
+            "\"git config core.symlinks true && git checkout -- .\"",
+    )
+}
+
 // Release signing (T094). The key and its passwords live outside the repository, in a
 // properties file named by KIDSGARDEN_SIGNING_PROPERTIES or, by default,
 // ~/.kidsgarden/signing.properties. Without it, release builds are produced unsigned.
 val signingPropertiesFile = (System.getenv("KIDSGARDEN_SIGNING_PROPERTIES")
     ?: "${System.getProperty("user.home")}/.kidsgarden/signing.properties").let(::File)
-val signingProperties = java.util.Properties().apply {
-    if (signingPropertiesFile.isFile) signingPropertiesFile.inputStream().use(::load)
+val signingProperties = Properties().apply {
+    if (signingPropertiesFile.isFile) signingPropertiesFile.inputStream().use { load(it) }
 }
 
 android {
@@ -110,6 +124,8 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // JVM tests on Windows: FileStorage cannot rename over an existing file there.
+    testImplementation(libs.androidx.datastore.core.okio)
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
