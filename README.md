@@ -29,11 +29,15 @@ Kids Garden takes a different approach:
 | **Parent Mode** | Full speed for the parent, with no timer. Locking the phone or turning off the screen ends it. |
 | **Play Session** | Full speed for the child for 10–120 minutes, chosen in 10-minute steps. |
 | **Soft Landing** | The last minute or two of play, when the speed eases gradually back to dull. |
+| **Deactivated** | Kids Garden is switched off in Settings. The phone is never dulled until the parent turns it back on. |
 
 - Enter the PIN, then choose **Use phone as parent** or **Give phone to child**.
 - Play time keeps counting while the phone is locked or offline. It **pauses during normal phone calls**, so a call doesn't eat the child's time.
 - The Phone app, WhatsApp and the default SMS app are **excluded from dulling**, so the child can always reach family.
-- A restart, reboot or app update always returns the phone to **Dull**.
+- A restart, reboot or app update always returns the phone to **Dull**, unless the parent has switched Kids Garden off.
+- The parent can switch Kids Garden **off and on** in Settings with the PIN. While off, the phone works normally.
+- Besides slowing the internet, Dull Mode can **gently grey the screen, lower media volume and dim the brightness**. Each is switched on or off in Settings, fades in slowly, rests, and repeats. They also work on phones where the VPN can't run.
+- During setup Kids Garden **checks whether the phone can be dulled** and says why if it can't.
 
 ## Privacy
 

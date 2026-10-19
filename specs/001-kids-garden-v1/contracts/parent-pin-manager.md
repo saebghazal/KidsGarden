@@ -11,7 +11,7 @@
 | changePin(access, currentPinChars, newPinChars, confirmChars) | live session-bound access + inputs → Result<PinCredential> | Reauthenticate current credential; check one-use parent access/generation; create unique salt; persist atomically via SettingsRepository, then revoke every parent/phone grant and old access token. Do not confirm until durable save succeeds. |
 | recordFailure / retryStatus | volatile verifier-owned counter/time → state | After 5 consecutive failures impose 30 seconds using elapsed time; successful verification resets in memory. Process death clears this best-effort counter. No failure log or persistent counter. |
 
-No empty/short PIN, Unicode numerals, whitespace trimming, PIN hint, recovery password, device-unlock substitution, cloud reset or silent fallback credential. Six-digit entropy and bypassability after clear-data/reinstall are clearly disclosed as ordinary-app limits.
+No empty/short PIN, Unicode numerals, whitespace trimming, PIN hint, recovery password, device-unlock substitution, cloud reset or silent fallback credential. Short-PIN (one to six digits) entropy and bypassability after clear-data/reinstall are clearly disclosed as ordinary-app limits.
 
 ## Credential record
 

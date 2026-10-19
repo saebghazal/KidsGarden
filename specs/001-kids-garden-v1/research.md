@@ -62,7 +62,7 @@ Build only the required arm64-v8a and x86_64 ABIs initially. Validate native pac
 
 **Rationale:** Do not misuse dataSync, phoneCall, device admin, exact-alarm access, or battery exemptions to keep an unrelated service alive. Denial of POST_NOTIFICATIONS does not justify claiming all system foreground indications are hidden. Denial of READ_PHONE_STATE only disables call pause.
 
-Boot/update execution starts at DULL with no grant (authorization is memory-only, R7). The service may recover only when Android permits; no pre-unlock/force-stop enforcement promise. Initial distribution does not require always-on or lockdown; opt out of always-on support until validated rather than advertise it accidentally.
+Boot/update execution starts at DULL with no grant (authorization is memory-only, R7), or at DEACTIVATED without starting the VPN when the parent has saved Deactivated (FR-031). The service may recover only when Android permits; no pre-unlock/force-stop enforcement promise. Initial distribution does not require always-on or lockdown; opt out of always-on support until validated rather than advertise it accidentally.
 
 **Alternatives considered:** `specialUse` is not an automatic fallback for failed eligibility; it needs a valid documented use/declaration. A persisted VPN flag is not consent or live capability.
 

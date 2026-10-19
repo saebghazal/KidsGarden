@@ -1,6 +1,6 @@
 # Contract: Authorization, Call Pause, and Dulling Policy
 
-**Status**: Scoped V1 domain contract. Only normal mobile/Telecom calls pause child play; authorization is memory-only.
+**Status**: Scoped V1 domain contract. Only normal mobile/Telecom calls pause child play; authorization is memory-only. Includes the parent Active/Deactivated switch (FR-031, 2026-10-15) and screen and sound dulling policy (FR-034–036, 2026-10-18).
 
 ## Public domain boundary
 
@@ -8,16 +8,16 @@
 
 `StateMachine.reduce(state, event, time)` returns a new immutable state and typed effects. It imports no Android classes, UI, DataStore or VPN implementation. `SessionManager` serializes events and publishes StateFlow; all policy decisions belong to the reducer/pure DullModePolicy.
 
-Incoming events: ProcessStarted, UiOpened, ParentUiLeft, PinVerified, PinRejected, StartParentRequested, StartChildRequested(duration), ManualParentExit, ScreenOff, DeviceLocked, UserPresent, CallAggregateChanged, CallCapabilityChanged, DeadlineObserved, SettingsChanged, SettingsInvalid, SettingsWriteSucceeded/Failed, VpnCapabilityChanged, RebootObserved and PackageReplaced.
+Incoming events: ProcessStarted(savedActive), ScreenOn, EffectCapabilityChanged, MethodSwitchesChanged, ActivateRequested, DeactivateRequested(confirmed), UiOpened, ParentUiLeft, PinVerified, PinRejected, StartParentRequested, StartChildRequested(duration), ManualParentExit, ScreenOff, DeviceLocked, UserPresent, CallAggregateChanged, CallCapabilityChanged, DeadlineObserved, SettingsChanged, SettingsInvalid, SettingsWriteSucceeded/Failed, VpnCapabilityChanged, RebootObserved and PackageReplaced.
 
 Do not pass raw PINs or Android Intent extras into the reducer. PIN verification returns only an opaque short-lived permission/generation. Call events contain minimal active/unknown state and timing, not identities or content.
 
-Effects: PersistSettings (parent settings changes only; never authorization, session, or pause data), ApplyNetworkPolicy, ScheduleBoundary, CancelBoundary, ClearParentUiAccess, PublishParentStatus. Each asynchronous effect carries an authorization generation. Ordinary UI navigation is not a phone authorization effect.
+Effects: ApplyEffectPolicy(policy, generation), PersistSettings (parent settings changes only, including `active` and method switches; never authorization, session, or pause data), StartVpn, StopVpn, ApplyNetworkPolicy, ScheduleBoundary, CancelBoundary, ClearParentUiAccess, PublishParentStatus. Each asynchronous effect carries an authorization generation. Ordinary UI navigation is not a phone authorization effect.
 
 ## State dimensions
 
-- `KidsGardenMode`: DULL, PARENT_MODE, CHILD_PLAY_SESSION, SOFT_LANDING, SETUP_REQUIRED.
-- Live, memory-only authorization uses the first four; SETUP_REQUIRED is a derived parent view. Nothing about authorization is read from or written to storage.
+- `AuthorizationMode` (in `Mode.kt`): DULL, PARENT_MODE, CHILD_PLAY_SESSION, SOFT_LANDING, DEACTIVATED. `DisplayMode` adds SETUP_REQUIRED (derived only).
+- Live, memory-only authorization uses the first five; DEACTIVATED is the parent-chosen off state and holds no grant; SETUP_REQUIRED is a derived parent view. Nothing about authorization is read from or written to storage.
 - ParentAccess is independent of phone authorization.
 - A validly ACTIVE telephony call source preserves authorization unless separately revoked and pause child play/ramp accounting. They do not override the network policy.
 - VPN/storage/setup unavailability still follows existing grant failure rules. Call permission/observation unavailability only removes pause eligibility and shows the parent limitation; it does not block grants or working VPN dulling.
@@ -27,7 +27,14 @@ Effects: PersistSettings (parent settings changes only; never authorization, ses
 
 | Event and preconditions | Authorization / accounting | Network intent / UI |
 | --- | --- | --- |
-| ProcessStarted, reboot, update | DULL with no tokens or grant (memory-only state starts empty; nothing is loaded) | No stale Normal authorization; apply Dull only when safe capability exists |
+| ProcessStarted, reboot, update | DULL with no tokens or grant (memory-only state starts empty); DEACTIVATED instead only when valid loaded settings have `active = false` | No stale Normal authorization; apply Dull only when safe capability exists; while DEACTIVATED do not start the VPN |
+| Mode becomes DULL, Active, no ACTIVE call | EffectPolicy = enabled effects + current intensity | ApplyEffectPolicy; cycle starts at zero on the next ScreenOn or immediately if the screen is on |
+| Grant start, Deactivate, telephony ACTIVE, or SOFT_LANDING/CHILD/PARENT mode | EffectPolicy = Off | ApplyEffectPolicy(Off): overlay removed, volume cap released, brightness restored |
+| ScreenOff while EffectPolicy on | Policy unchanged | Cycle stops; restarts from zero on ScreenOn |
+| EffectCapabilityChanged / MethodSwitchesChanged | Recompute dulling capability = VPN running OR any working enabled effect | SETUP_REQUIRED presentation only when capability is none; a working effect lets DULL hold and grants be offered |
+| DeactivateRequested(confirmed) + valid ParentAccess, any state except DEACTIVATED | After SettingsWriteSucceeded(active=false): DEACTIVATED; clear grant, pause accounting and grant permissions; bump generation | StopVpn and foreground service; dashboard shows Deactivated. On write failure: state unchanged, StorageUnavailable |
+| ActivateRequested + fresh PIN permission, DEACTIVATED | After SettingsWriteSucceeded(active=true): DULL with no grant | StartVpn; Dull when capability exists, otherwise SETUP_REQUIRED presentation. On write failure: stay DEACTIVATED |
+| Any grant, lock, screen, call, boundary, VPN or capability event while DEACTIVATED | Ignored; stays DEACTIVATED | No network policy; VPN stays stopped |
 | Ordinary UiOpened | Reconcile existing live state; no grant | PIN screen or setup; opening UI is not process restart |
 | UiOpened during PARENT_MODE, unlocked, no unused permission | Issue ParentAccess with a fresh one-use grant permission; mode unchanged | Parent actions without PIN; Normal unchanged |
 | Valid PIN | ParentAccess only | No policy change |
@@ -65,6 +72,7 @@ Bound/collapse redundant tick/profile observations; never drop security-relevant
 
 ## Profile mapping and precedence
 
+0. DEACTIVATED → VPN stopped and EffectPolicy Off; ordinary routing. This is intentional, not a capability failure or SETUP_REQUIRED.
 1. Unavailable forwarding capability → ordinary fail-open routing and parent-only limited VPN status; this is not successful DULL enforcement.
 2. Fixed exclusions (default/system dialer, default SMS/RCS app, com.whatsapp) bypass the VPN where technically possible, independently of call detection. All remaining traffic follows authorization below.
 3. PARENT_MODE or early child play → Normal.
@@ -88,6 +96,6 @@ For a session target K kbps / L ms and ramp fraction p:
 
 ## Minimum contract tests
 
-Unauthorized unlock; PIN without action; each duration; child immediate UI lock; parent lock/off/unlock; UI recreate versus process death; app update/reboot starting at DULL; invalid elapsed accounting; wall clock shifts; stale commands; concurrent expiry/call; multi-subscription/duplicate calls; WhatsApp/other app call produces no pause; missed calls; lost end callback at mandatory boundary; paused session lock/unlock; parent lock during call; replacement during call; 30/5/25 example; paused 45-second ramp; unsupported/unavailable call observation; VPN loss; failed settings write leaves authorization unchanged; each target-relative profile and explicit Gentle non-overshoot.
+Unauthorized unlock; PIN without action; each duration; child immediate UI lock; parent lock/off/unlock; UI recreate versus process death; app update/reboot starting at DULL; invalid elapsed accounting; wall clock shifts; stale commands; concurrent expiry/call; multi-subscription/duplicate calls; WhatsApp/other app call produces no pause; missed calls; lost end callback at mandatory boundary; paused session lock/unlock; parent lock during call; replacement during call; 30/5/25 example; paused 45-second ramp; unsupported/unavailable call observation; VPN loss; failed settings write leaves authorization unchanged; deactivate from every state (including during a call pause and Soft Landing); every event ignored while DEACTIVATED; activate to DULL and to SETUP_REQUIRED; failed Activate/Deactivate write; process start with saved `active = false`; EffectPolicy on only in DULL+Active without ACTIVE call; policy Off on every grant/call/Deactivate; capability with VPN failed but an effect working; each target-relative profile and explicit Gentle non-overshoot.
 
 Use fake elapsed time and scoped observations for domain tests. Verify unsupported calls, permission loss and adapter failure continue countdown without blocking grants/dulling; lock/unlock does not reset paused time. Device tests separately qualify actual telephony observation and communication-app exclusions; fakes do not prove platform behavior.
