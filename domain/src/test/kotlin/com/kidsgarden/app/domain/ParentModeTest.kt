@@ -106,7 +106,7 @@ class ParentModeTest {
             DomainEvent.InteractivityObserved(false),
             DomainEvent.VpnCapabilityChanged(VpnCapability.UNAVAILABLE),
             DomainEvent.SettingsInvalid,
-            DomainEvent.ProcessStarted,
+            DomainEvent.ProcessStarted(),
             DomainEvent.RebootObserved,
             DomainEvent.PackageReplaced,
         )

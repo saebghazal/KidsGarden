@@ -38,7 +38,7 @@ class StateMachineFoundationTest {
 
     @Test
     fun processStartRebootAndUpdateClearEverything() {
-        for (event in listOf(DomainEvent.ProcessStarted, DomainEvent.RebootObserved, DomainEvent.PackageReplaced)) {
+        for (event in listOf(DomainEvent.ProcessStarted(), DomainEvent.RebootObserved, DomainEvent.PackageReplaced)) {
             val before = grantedState()
             val result = reduce(before, event)
             assertEquals(AuthorizationMode.DULL, result.state.mode)
@@ -52,14 +52,14 @@ class StateMachineFoundationTest {
 
     @Test
     fun restartAppliesDullProfileWhenVpnRunning() {
-        val result = reduce(grantedState(), DomainEvent.ProcessStarted)
+        val result = reduce(grantedState(), DomainEvent.ProcessStarted())
         val policy = result.effects.filterIsInstance<Effect.ApplyNetworkPolicy>().single().policy
         assertEquals(NetworkPolicy.Dull(DullIntensity.MEDIUM), policy)
     }
 
     @Test
     fun restartWithoutVpnReportsUnavailableNotNormal() {
-        val result = reduce(AuthorizationState.initial(), DomainEvent.ProcessStarted)
+        val result = reduce(AuthorizationState.initial(), DomainEvent.ProcessStarted())
         val policy = result.effects.filterIsInstance<Effect.ApplyNetworkPolicy>().single().policy
         assertTrue(policy is NetworkPolicy.Unavailable)
         assertEquals(DisplayMode.SETUP_REQUIRED, result.state.displayMode)

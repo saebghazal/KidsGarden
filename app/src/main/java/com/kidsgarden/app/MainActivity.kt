@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
         container.setupStatus.refresh()
         container.deviceEvents.sample()
         container.callMonitor.refresh()
+        container.effectCapability.refresh()
         container.sessionManager.dispatch(DomainEvent.UiOpened)
     }
 

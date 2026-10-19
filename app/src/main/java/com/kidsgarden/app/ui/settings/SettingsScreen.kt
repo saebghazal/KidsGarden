@@ -6,11 +6,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -22,6 +30,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kidsgarden.app.R
 import com.kidsgarden.app.domain.DullIntensity
+import com.kidsgarden.app.domain.EffectCycle
+import com.kidsgarden.app.domain.ScreenEffect
+import com.kidsgarden.app.ui.dashboard.DullingMethod
+import com.kidsgarden.app.ui.dashboard.MethodState
+import com.kidsgarden.app.ui.dashboard.MethodStatus
+import androidx.compose.ui.res.pluralStringResource
 import com.kidsgarden.app.ui.dashboard.intensityName
 import com.kidsgarden.app.ui.setup.BodyText
 import com.kidsgarden.app.ui.setup.SetupScaffold
@@ -33,6 +47,15 @@ data class SettingsUiState(
     val vpnRunning: Boolean,
     val callPausePermissionMissing: Boolean,
     val saveFailed: Boolean,
+    /** Saved Active/Deactivated choice; changes only after the write succeeds. */
+    val active: Boolean = true,
+    /** Saved method switches (FR-036). */
+    val networkEnabled: Boolean = true,
+    val enabledEffects: Set<ScreenEffect> = emptySet(),
+    val buildUpSeconds: Int = EffectCycle.DEFAULT_BUILD_UP_SECONDS,
+    val breakSeconds: Int = EffectCycle.DEFAULT_BREAK_SECONDS,
+    /** Whether each method actually works now. */
+    val methods: List<MethodStatus> = emptyList(),
 )
 
 /**
@@ -50,7 +73,41 @@ fun SettingsScreen(
     onLimitations: () -> Unit,
     onPrivacy: () -> Unit,
     onEnableCallPause: () -> Unit,
+    onDeactivate: () -> Unit = {},
+    onActivate: () -> Unit = {},
+    onEffectSwitch: (ScreenEffect, Boolean) -> Unit = { _, _ -> },
+    onBuildUp: (seconds: Int) -> Unit = {},
+    onBreak: (seconds: Int) -> Unit = {},
+    onCheckPhone: () -> Unit = {},
 ) {
+    var confirmDeactivate by remember { mutableStateOf(false) }
+    var lastMethodWarning by remember { mutableStateOf(false) }
+    val enabledCount = (if (state.networkEnabled) 1 else 0) + state.enabledEffects.size
+
+    /** The last enabled method cannot be switched off (FR-023); Deactivate is the way off. */
+    fun guarded(on: Boolean, change: () -> Unit) {
+        if (!on && enabledCount <= 1) {
+            lastMethodWarning = true
+        } else {
+            lastMethodWarning = false
+            change()
+        }
+    }
+    if (confirmDeactivate) {
+        AlertDialog(
+            onDismissRequest = { confirmDeactivate = false },
+            text = { Text(stringResource(R.string.deactivate_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDeactivate = false
+                    onDeactivate()
+                }) { Text(stringResource(R.string.deactivate_confirm_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeactivate = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
     SetupScaffold(
         title = stringResource(R.string.settings_title),
         actions = {
@@ -73,6 +130,15 @@ fun SettingsScreen(
             )
         }
 
+        Heading(stringResource(R.string.active_heading))
+        LabeledSwitch(
+            label = stringResource(R.string.active_switch_label),
+            checked = state.active,
+            // Off asks once for confirmation; on goes through a fresh PIN entry.
+            onCheckedChange = { on -> if (on) onActivate() else confirmDeactivate = true },
+        )
+        if (!state.active) BodyText(stringResource(R.string.deactivated_status))
+
         Heading(stringResource(R.string.settings_intensity_heading))
         RadioGroup(
             options = DullIntensity.entries.map { it to stringResource(intensityName(it)) },
@@ -87,12 +153,59 @@ fun SettingsScreen(
             onSelect = onSoftLanding,
         )
 
-        Heading(stringResource(R.string.settings_vpn_heading))
+        Heading(stringResource(R.string.methods_heading))
+        // Network dulling = the VPN. Off ends grants and stops it; on goes through VPN setup.
+        LabeledSwitch(
+            label = stringResource(R.string.method_network),
+            checked = state.networkEnabled,
+            onCheckedChange = { on -> guarded(on) { if (on) onStartVpn() else onStopVpn() } },
+        )
         BodyText(stringResource(if (state.vpnRunning) R.string.dashboard_vpn_running else R.string.vpn_limited))
-        OutlinedButton(onClick = if (state.vpnRunning) onStopVpn else onStartVpn, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(if (state.vpnRunning) R.string.settings_vpn_stop else R.string.settings_vpn_start))
+        for ((effect, label) in listOf(
+            ScreenEffect.GREY_SCREEN to R.string.method_grey,
+            ScreenEffect.LOWER_VOLUME to R.string.method_volume,
+            ScreenEffect.LOWER_BRIGHTNESS to R.string.method_brightness,
+        )) {
+            LabeledSwitch(
+                label = stringResource(label),
+                checked = effect in state.enabledEffects,
+                onCheckedChange = { on -> guarded(on) { onEffectSwitch(effect, on) } },
+            )
+        }
+        if (lastMethodWarning) {
+            Text(
+                text = stringResource(R.string.method_last),
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
+        for (status in state.methods) {
+            val text = when {
+                status.state == MethodState.ACCESS_MISSING && status.method == DullingMethod.GREY -> stringResource(R.string.grey_needs_access)
+                status.state == MethodState.ACCESS_MISSING && status.method == DullingMethod.BRIGHTNESS -> stringResource(R.string.brightness_needs_access)
+                else -> stringResource(R.string.method_status, stringResource(status.method.label), stringResource(status.state.label))
+            }
+            BodyText(text)
+        }
+        OutlinedButton(onClick = onCheckPhone, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.compat_check))
         }
         BodyText(stringResource(R.string.settings_vpn_android_note))
+
+        Heading(stringResource(R.string.effect_build_up_heading))
+        RadioGroup(
+            options = EffectCycle.BUILD_UP_SECONDS.map { it to pluralStringResource(R.plurals.effect_minutes, it / 60, it / 60) },
+            selected = state.buildUpSeconds,
+            onSelect = onBuildUp,
+        )
+        Heading(stringResource(R.string.effect_break_heading))
+        RadioGroup(
+            options = EffectCycle.BREAK_SECONDS.map {
+                it to if (it == 0) stringResource(R.string.effect_break_none) else pluralStringResource(R.plurals.effect_minutes, it / 60, it / 60)
+            },
+            selected = state.breakSeconds,
+            onSelect = onBreak,
+        )
 
         if (state.callPausePermissionMissing) {
             BodyText(stringResource(R.string.call_limitation))
@@ -123,5 +236,20 @@ private fun <T> RadioGroup(options: List<Pair<T, String>>, selected: T, onSelect
                 Text(text = label, modifier = Modifier.padding(start = 12.dp))
             }
         }
+    }
+}
+
+/** A full-width row that toggles; TalkBack reads the label with the switch state. */
+@Composable
+internal fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, enabled: Boolean = true) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = label, modifier = Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }

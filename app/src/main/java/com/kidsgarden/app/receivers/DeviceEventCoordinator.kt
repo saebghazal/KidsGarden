@@ -26,9 +26,10 @@ class DeviceEventCoordinator(
     private val power = appContext.getSystemService(PowerManager::class.java)
     private val keyguard = appContext.getSystemService(KeyguardManager::class.java)
 
-    private val screenReceiver = ScreenStateReceiver {
-        sessionManager.dispatch(DomainEvent.ScreenOff)
-    }
+    private val screenReceiver = ScreenStateReceiver(
+        onScreenOff = { sessionManager.dispatch(DomainEvent.ScreenOff) },
+        onScreenOn = { sessionManager.dispatch(DomainEvent.ScreenOn) },
+    )
     private val presentReceiver = UserPresentReceiver {
         sessionManager.dispatch(DomainEvent.UserPresent)
     }
@@ -38,7 +39,14 @@ class DeviceEventCoordinator(
     fun start() {
         if (registered) return
         // System broadcasts still reach not-exported receivers.
-        appContext.registerReceiver(screenReceiver, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
+        appContext.registerReceiver(
+            screenReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
+            Context.RECEIVER_NOT_EXPORTED,
+        )
         appContext.registerReceiver(presentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), Context.RECEIVER_NOT_EXPORTED)
         registered = true
         sample()
@@ -57,11 +65,11 @@ class DeviceEventCoordinator(
     fun sample() {
         val interactive = power?.isInteractive == true
         val locked = keyguard?.isDeviceLocked != false
-        val event = when {
-            !interactive -> DomainEvent.ScreenOff
-            locked -> DomainEvent.DeviceLocked
-            else -> DomainEvent.InteractivityObserved(interactiveAndUnlocked = true)
+        if (!interactive) {
+            sessionManager.dispatch(DomainEvent.ScreenOff)
+            return
         }
-        sessionManager.dispatch(event)
+        sessionManager.dispatch(DomainEvent.ScreenOn)
+        sessionManager.dispatch(if (locked) DomainEvent.DeviceLocked else DomainEvent.InteractivityObserved(interactiveAndUnlocked = true))
     }
 }

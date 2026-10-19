@@ -1,6 +1,21 @@
 package com.kidsgarden.app.ui.navigation
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.platform.LocalContext
+import com.kidsgarden.app.domain.EffectAccess
+import com.kidsgarden.app.domain.EffectCycle
+import com.kidsgarden.app.domain.ScreenEffect
+import com.kidsgarden.app.ui.dashboard.methodStatuses
+import com.kidsgarden.app.ui.setup.ModifySettingsPermissionScreen
+import com.kidsgarden.app.ui.setup.OverlayPermissionScreen
+import com.kidsgarden.app.ui.setup.overlaySettingsIntent
+import com.kidsgarden.app.ui.setup.writeSettingsIntent
+import com.kidsgarden.app.vpn.CompatibilityResult
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -77,6 +92,8 @@ object Routes {
     const val CHANGE_PIN = "changePin"
     const val LIMITATIONS = "limitations"
     const val PRIVACY_INFO = "privacy"
+    const val OVERLAY_ACCESS = "settings/overlayAccess"
+    const val WRITE_SETTINGS_ACCESS = "settings/writeSettingsAccess"
 
     /** Inert confirmation after a child session starts; not protected, shows no controls. */
     const val CHILD_STARTED = "childStarted"
@@ -201,18 +218,34 @@ fun KidsGardenNavHost(
         guardedComposable(Routes.VPN, accessActive, denied) {
             var consentDenied by remember { mutableStateOf(false) }
             var saveFailed by remember { mutableStateOf(false) }
+            var compatibility by remember { mutableStateOf<CompatibilityResult?>(null) }
+            var checking by remember { mutableStateOf(false) }
+            // After consent the local compatibility check runs; a Pass leaves the VPN running (FR-032).
             val requestConsent = rememberVpnPermissionLauncher { granted ->
                 consentDenied = !granted
                 container.setupStatus.refresh()
-                if (granted) scope.launch { container.vpnController.start() }
+                scope.launch {
+                    checking = true
+                    compatibility = container.vpnController.checkCompatibility()
+                    checking = false
+                    container.setupStatus.refresh()
+                }
             }
+            val effectsWorking = snapshot.enabledEffects.any { snapshot.effectAccess[it] == EffectAccess.WORKING }
             VpnSetupScreen(
                 status = vpnSetupStatus(vpnCapability, consentDenied),
                 saveFailed = saveFailed,
+                compatibility = compatibility,
+                checking = checking,
+                effectsWorking = effectsWorking,
+                onUseEffects = { navController.navigate(Routes.SETTINGS) },
                 onSetUp = requestConsent,
                 onFinish = {
                     scope.launch {
-                        saveFailed = container.settingsRepository.updateVpnPreference(true).isFailure
+                        // Network dulling is saved on only when the VPN really runs; otherwise
+                        // setup finishes with the working screen and sound effects.
+                        val vpnRunning = vpnCapability.capability == VpnCapability.RUNNING
+                        saveFailed = vpnRunning && container.settingsRepository.updateVpnPreference(true).isFailure
                         when {
                             saveFailed -> Unit
                             setup?.onboardingComplete == true -> navController.popBackStack()
@@ -251,7 +284,23 @@ fun KidsGardenNavHost(
         }
 
         guardedComposable(Routes.ACTIONS, accessActive, denied) {
+            var activateFailed by remember { mutableStateOf(false) }
             ParentActionScreen(
+                // While Deactivated only Activate and Settings are offered (FR-031). Activate uses
+                // the one-use permission from the PIN just entered; success ends parent access.
+                onActivate = if (!snapshot.active) {
+                    {
+                        val permission = snapshot.grantPermission
+                        if (permission == null) {
+                            navController.closeProtectedRoutes()
+                        } else {
+                            scope.launch { activateFailed = session.activate(permission).isFailure }
+                        }
+                    }
+                } else {
+                    null
+                },
+                activateFailed = activateFailed,
                 protectionReady = snapshot.displayMode != DisplayMode.SETUP_REQUIRED,
                 onUseAsParent = {
                     snapshot.grantPermission?.let { permission ->
@@ -281,11 +330,22 @@ fun KidsGardenNavHost(
         }
 
         guardedComposable(Routes.DASHBOARD, accessActive, denied) {
+            val context = LocalContext.current
+            val vpnReason = remember {
+                container.vpnController.capability.map { it.reason }
+                    .stateIn(scope, SharingStarted.Eagerly, container.vpnController.capability.value.reason)
+            }
             val dashboardViewModel = viewModel {
-                DashboardViewModel(session.state, container.setupStatus.status, container.time)
+                DashboardViewModel(session.state, container.setupStatus.status, container.time, vpnReason)
             }
             val dashboard by dashboardViewModel.state.collectAsStateWithLifecycle()
-            DashboardScreen(state = dashboard, onParentOptions = { navController.navigate(Routes.ACTIONS) })
+            DashboardScreen(
+                state = dashboard,
+                onParentOptions = { navController.navigate(Routes.ACTIONS) },
+                // Opened only when the parent taps it; Kids Garden never asks for the exemption (FR-033).
+                onBatterySettings = { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) },
+                onCheckPhone = { navController.navigate(Routes.VPN) },
+            )
         }
 
         guardedComposable(Routes.SETTINGS, accessActive, denied) {
@@ -302,12 +362,48 @@ fun KidsGardenNavHost(
             }
             SettingsScreen(
                 state = SettingsUiState(
+                    active = document?.active ?: true,
                     intensity = document?.dullIntensity ?: DullIntensity.MEDIUM,
                     softLandingSeconds = document?.softLandingDurationSeconds ?: 120,
                     vpnRunning = vpnCapability.capability == VpnCapability.RUNNING,
                     callPausePermissionMissing = callCapability == CallDetectionCapability.PERMISSION_MISSING,
                     saveFailed = saveFailed,
+                    networkEnabled = document?.vpnDullingEnabled ?: true,
+                    enabledEffects = document?.screenEffects?.enabled().orEmpty(),
+                    buildUpSeconds = document?.screenEffects?.buildUpSeconds ?: EffectCycle.DEFAULT_BUILD_UP_SECONDS,
+                    breakSeconds = document?.screenEffects?.breakSeconds ?: EffectCycle.DEFAULT_BREAK_SECONDS,
+                    methods = methodStatuses(snapshot),
                 ),
+                onEffectSwitch = { effect, on ->
+                    document?.let { current ->
+                        val effects = current.screenEffects.enabled().let { if (on) it + effect else it - effect }
+                        save {
+                            repository.updateMethodSwitches(
+                                network = current.vpnDullingEnabled,
+                                grey = ScreenEffect.GREY_SCREEN in effects,
+                                volume = ScreenEffect.LOWER_VOLUME in effects,
+                                brightness = ScreenEffect.LOWER_BRIGHTNESS in effects,
+                            )
+                        }
+                    }
+                    // Access is explained and requested only when the parent turns the effect on.
+                    if (on && snapshot.effectAccess[effect] != EffectAccess.WORKING) {
+                        when (effect) {
+                            ScreenEffect.GREY_SCREEN -> navController.navigate(Routes.OVERLAY_ACCESS)
+                            ScreenEffect.LOWER_BRIGHTNESS -> navController.navigate(Routes.WRITE_SETTINGS_ACCESS)
+                            ScreenEffect.LOWER_VOLUME -> Unit
+                        }
+                    }
+                },
+                onBuildUp = { seconds ->
+                    val pause = document?.screenEffects?.breakSeconds ?: EffectCycle.DEFAULT_BREAK_SECONDS
+                    save { repository.updateEffectTiming(seconds, pause) }
+                },
+                onBreak = { seconds ->
+                    val buildUp = document?.screenEffects?.buildUpSeconds ?: EffectCycle.DEFAULT_BUILD_UP_SECONDS
+                    save { repository.updateEffectTiming(buildUp, seconds) }
+                },
+                onCheckPhone = { navController.navigate(Routes.VPN) },
                 onIntensity = { intensity -> save { repository.updateIntensity(intensity) } },
                 onSoftLanding = { seconds -> save { repository.updateSoftLandingDuration(seconds) } },
                 onStopVpn = {
@@ -326,6 +422,27 @@ fun KidsGardenNavHost(
                 onLimitations = { navController.navigate(Routes.LIMITATIONS) },
                 onPrivacy = { navController.navigate(Routes.PRIVACY_INFO) },
                 onEnableCallPause = { navController.navigate(Routes.PHONE_STATE) },
+                onDeactivate = { scope.launch { saveFailed = session.deactivate(confirmed = true).isFailure } },
+                // Activate needs a fresh PIN: leave the parent interface; the PIN leads to Activate.
+                onActivate = { session.dispatch(DomainEvent.ParentUiLeft) },
+            )
+        }
+
+        guardedComposable(Routes.OVERLAY_ACCESS, accessActive, denied) {
+            val context = LocalContext.current
+            OverlayPermissionScreen(
+                granted = snapshot.effectAccess[ScreenEffect.GREY_SCREEN] == EffectAccess.WORKING,
+                onOpenSettings = { context.startActivity(overlaySettingsIntent(context.packageName)) },
+                onContinue = { navController.popBackStack() },
+            )
+        }
+
+        guardedComposable(Routes.WRITE_SETTINGS_ACCESS, accessActive, denied) {
+            val context = LocalContext.current
+            ModifySettingsPermissionScreen(
+                granted = snapshot.effectAccess[ScreenEffect.LOWER_BRIGHTNESS] == EffectAccess.WORKING,
+                onOpenSettings = { context.startActivity(writeSettingsIntent(context.packageName)) },
+                onContinue = { navController.popBackStack() },
             )
         }
 

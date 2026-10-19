@@ -12,6 +12,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Per-subscription telephony call state only; requested after a parent explanation (FR-021). -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Screen and sound dulling (FR-034, FR-036): granted by the parent in Android settings
+         after an explanation, and only when that effect is switched on. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Package visibility for VPN exclusions only (research R10). No QUERY_ALL_PACKAGES. -->
     <queries>

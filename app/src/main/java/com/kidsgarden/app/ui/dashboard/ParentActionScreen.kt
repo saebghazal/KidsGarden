@@ -21,6 +21,9 @@ import com.kidsgarden.app.ui.setup.SetupScaffold
  *
  * [onExitParentMode] is non-null while Parent Mode is on (T055): the screen then offers
  * "Exit Parent Mode" (no PIN needed) in place of "Use phone as parent".
+ *
+ * [onActivate] is non-null while Kids Garden is Deactivated (FR-031): the screen then offers
+ * only "Activate Kids Garden" and Settings.
  */
 @Composable
 fun ParentActionScreen(
@@ -31,7 +34,13 @@ fun ParentActionScreen(
     onVpnSetup: () -> Unit,
     onStatus: (() -> Unit)? = null,
     onExitParentMode: (() -> Unit)? = null,
+    onActivate: (() -> Unit)? = null,
+    activateFailed: Boolean = false,
 ) {
+    if (onActivate != null) {
+        DeactivatedActions(onActivate, onSettings, activateFailed)
+        return
+    }
     SetupScaffold(
         title = stringResource(R.string.actions_title),
         actions = {
@@ -75,5 +84,26 @@ fun ParentActionScreen(
                 },
             ),
         )
+    }
+}
+
+/** While Deactivated: plain status, Activate, and Settings only. */
+@Composable
+private fun DeactivatedActions(onActivate: () -> Unit, onSettings: (() -> Unit)?, activateFailed: Boolean) {
+    SetupScaffold(
+        title = stringResource(R.string.actions_title),
+        actions = {
+            Button(onClick = onActivate, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_activate))
+            }
+            if (onSettings != null) {
+                OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.action_settings))
+                }
+            }
+        },
+    ) {
+        BodyText(stringResource(R.string.deactivated_status))
+        if (activateFailed) BodyText(stringResource(R.string.activate_failed))
     }
 }

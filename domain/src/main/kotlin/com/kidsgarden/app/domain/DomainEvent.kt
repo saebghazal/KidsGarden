@@ -5,7 +5,11 @@ package com.kidsgarden.app.domain
  * raw PINs, Android types, intent extras, or any call/content identity.
  */
 sealed interface DomainEvent {
-    data object ProcessStarted : DomainEvent
+    /**
+     * A new process. [savedActive] is the valid saved `active` setting; false starts at
+     * DEACTIVATED (FR-031). Missing or invalid settings always mean true.
+     */
+    data class ProcessStarted(val savedActive: Boolean = true) : DomainEvent
     data object RebootObserved : DomainEvent
     data object PackageReplaced : DomainEvent
 
@@ -27,6 +31,17 @@ sealed interface DomainEvent {
     data class StartChildRequested(val grantPermission: Long, val durationMinutes: Int) : DomainEvent
     data object ManualParentExit : DomainEvent
 
+    /** Confirmed Deactivate from the parent interface (FR-031). Commits only after the save. */
+    data class DeactivateRequested(val confirmed: Boolean) : DomainEvent
+
+    /** Activate with the fresh one-use permission from the PIN entry. Commits only after the save. */
+    data class ActivateRequested(val grantPermission: Long) : DomainEvent
+
+    /** Outcome of saving `active`, reported by SessionManager after a requested switch. */
+    data class ActiveWriteSucceeded(val active: Boolean) : DomainEvent
+    data class ActiveWriteFailed(val active: Boolean) : DomainEvent
+
+    data object ScreenOn : DomainEvent
     data object ScreenOff : DomainEvent
     data object DeviceLocked : DomainEvent
     data object UserPresent : DomainEvent
@@ -47,6 +62,12 @@ sealed interface DomainEvent {
 
     data class VpnCapabilityChanged(val capability: VpnCapability) : DomainEvent
 
+    /** Live per-effect access (FR-036). Missing access disables only that effect. */
+    data class EffectCapabilityChanged(val access: Map<ScreenEffect, EffectAccess>) : DomainEvent
+
+    /** The parent changed the four dulling-method switches (FR-036). */
+    data class MethodSwitchesChanged(val networkEnabled: Boolean, val effects: Set<ScreenEffect>) : DomainEvent
+
     /** Device interactivity sampled by the platform (screen on and unlocked). */
     data class InteractivityObserved(val interactiveAndUnlocked: Boolean) : DomainEvent
 }
@@ -57,6 +78,12 @@ data class DomainSettings(
     val softLandingDurationSeconds: Int = 120,
     val credentialPresent: Boolean = false,
     val onboardingComplete: Boolean = false,
+    /** Parent Active/Deactivated choice (FR-031). Only read at process start. */
+    val active: Boolean = true,
+    /** Network dulling switch (`vpnDullingEnabled`). */
+    val networkEnabled: Boolean = true,
+    /** Enabled screen and sound effects (FR-036). */
+    val enabledEffects: Set<ScreenEffect> = emptySet(),
 )
 
 /** Live shaping capability reported by the VPN controller. A saved preference is not proof. */
@@ -103,4 +130,16 @@ sealed interface Effect {
     /** Query current call state now and report it as [DomainEvent.CallReconciled]. */
     data class ReconcileCalls(override val generation: Long) : Effect
     data class PublishParentStatus(override val generation: Long) : Effect
+
+    /** Save the Active/Deactivated choice; SessionManager reports the outcome as an event. */
+    data class PersistActive(val active: Boolean, override val generation: Long) : Effect
+
+    /** Start VPN dulling (Activate). Starting still needs live consent. */
+    data class StartVpn(override val generation: Long) : Effect
+
+    /** Stop VPN dulling and its foreground service (Deactivate). */
+    data class StopVpn(override val generation: Long) : Effect
+
+    /** Screen and sound effects; [screenOn] lets the platform stop or restart the cycle. */
+    data class ApplyEffectPolicy(val policy: EffectPolicy, val screenOn: Boolean, override val generation: Long) : Effect
 }

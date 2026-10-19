@@ -18,6 +18,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kidsgarden.app.R
 import com.kidsgarden.app.domain.DisplayMode
 import com.kidsgarden.app.domain.DullIntensity
+import com.kidsgarden.app.domain.ScreenEffect
 import com.kidsgarden.app.domain.TimeProvider
 import com.kidsgarden.app.ui.dashboard.DashboardScreen
 import com.kidsgarden.app.ui.dashboard.DashboardUiState
@@ -104,8 +105,16 @@ class DashboardSettingsTest {
         compose.onAllNodesWithText(text(R.string.call_limitation)).assertCountEquals(0)
     }
 
-    private fun settingsState(vpnRunning: Boolean = true, callMissing: Boolean = false, saveFailed: Boolean = false) =
-        SettingsUiState(DullIntensity.MEDIUM, 120, vpnRunning, callMissing, saveFailed)
+    private fun settingsState(
+        vpnRunning: Boolean = true,
+        callMissing: Boolean = false,
+        saveFailed: Boolean = false,
+        networkEnabled: Boolean = true,
+        effects: Set<ScreenEffect> = setOf(ScreenEffect.LOWER_VOLUME),
+    ) = SettingsUiState(
+        DullIntensity.MEDIUM, 120, vpnRunning, callMissing, saveFailed,
+        networkEnabled = networkEnabled, enabledEffects = effects,
+    )
 
     @Test
     fun eachSettingChangeIsReported() {
@@ -127,7 +136,8 @@ class DashboardSettingsTest {
         }
         compose.onNodeWithText(text(R.string.intensity_strong)).performScrollTo().performClick()
         compose.onNodeWithText(text(R.string.ramp_one_minute)).performScrollTo().performClick()
-        compose.onNodeWithText(text(R.string.settings_vpn_stop)).performScrollTo().performClick()
+        // Network dulling off stops the VPN (another method is still on).
+        compose.onNodeWithText(text(R.string.method_network)).performScrollTo().performClick()
         assertEquals(DullIntensity.STRONG, intensity)
         assertEquals(60, ramp)
         assertEquals(1, stops)
@@ -139,13 +149,13 @@ class DashboardSettingsTest {
         var starts = 0
         compose.setContent {
             SettingsScreen(
-                state = settingsState(vpnRunning = false),
+                state = settingsState(vpnRunning = false, networkEnabled = false),
                 onIntensity = {}, onSoftLanding = {}, onStopVpn = {}, onStartVpn = { starts++ },
                 onChangePin = {}, onLimitations = {}, onPrivacy = {}, onEnableCallPause = {},
             )
         }
         compose.onNodeWithText(text(R.string.vpn_limited)).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText(text(R.string.settings_vpn_start)).performScrollTo().performClick()
+        compose.onNodeWithText(text(R.string.method_network)).performScrollTo().performClick()
         assertEquals(1, starts)
     }
 

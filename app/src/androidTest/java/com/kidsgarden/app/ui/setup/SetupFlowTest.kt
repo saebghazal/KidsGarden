@@ -70,7 +70,7 @@ class SetupFlowTest {
     @Test
     fun fullFlowWithFakesEndsDullWithNoGrant() {
         val session = sessionManager()
-        session.dispatch(DomainEvent.ProcessStarted)
+        session.dispatch(DomainEvent.ProcessStarted())
         var notificationPrompts = 0
         var vpnPrompts = 0
 

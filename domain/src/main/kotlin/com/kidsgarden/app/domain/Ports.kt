@@ -34,3 +34,19 @@ interface NetworkPolicySink {
 interface SettingsStore {
     val settings: Flow<DomainSettings>
 }
+
+/** Saves the parent's Active/Deactivated choice (FR-031). True only after a durable write. */
+fun interface ActivationStore {
+    suspend fun saveActive(active: Boolean): Boolean
+}
+
+/** Starts and stops VPN dulling for Activate and Deactivate. */
+interface VpnLifecycle {
+    fun startVpn()
+    fun stopVpn()
+}
+
+/** Applies screen and sound effects; implemented by ScreenEffectsController. */
+fun interface EffectPolicySink {
+    fun apply(policy: EffectPolicy, screenOn: Boolean, generation: Long)
+}
