@@ -109,10 +109,10 @@ class SessionManager(
     suspend fun deactivate(confirmed: Boolean): Result<Unit> = request(DomainEvent.DeactivateRequested(confirmed))
 
     /**
-     * Activate with the one-use permission from a fresh PIN entry. Saves `active = true`,
+     * Activate from the parent interface (needs current parent access). Saves `active = true`,
      * then DULL with the VPN restarted. Never creates a grant.
      */
-    suspend fun activate(grantPermission: Long): Result<Unit> = request(DomainEvent.ActivateRequested(grantPermission))
+    suspend fun activate(): Result<Unit> = request(DomainEvent.ActivateRequested)
 
     private suspend fun request(event: DomainEvent): Result<Unit> {
         val reply = CompletableDeferred<Result<Unit>>()

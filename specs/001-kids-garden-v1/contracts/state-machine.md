@@ -33,7 +33,7 @@ Effects: ApplyEffectPolicy(policy, generation), PersistSettings (parent settings
 | ScreenOff while EffectPolicy on | Policy unchanged | Cycle stops; restarts from zero on ScreenOn |
 | EffectCapabilityChanged / MethodSwitchesChanged | Recompute dulling capability = VPN running OR any working enabled effect | SETUP_REQUIRED presentation only when capability is none; a working effect lets DULL hold and grants be offered |
 | DeactivateRequested(confirmed) + valid ParentAccess, any state except DEACTIVATED | After SettingsWriteSucceeded(active=false): DEACTIVATED; clear grant, pause accounting and grant permissions; bump generation | StopVpn and foreground service; dashboard shows Deactivated. On write failure: state unchanged, StorageUnavailable |
-| ActivateRequested + fresh PIN permission, DEACTIVATED | After SettingsWriteSucceeded(active=true): DULL with no grant | StartVpn; Dull when capability exists, otherwise SETUP_REQUIRED presentation. On write failure: stay DEACTIVATED |
+| ActivateRequested + valid ParentAccess, DEACTIVATED | After SettingsWriteSucceeded(active=true): DULL with no grant | StartVpn; Dull when capability exists, otherwise SETUP_REQUIRED presentation. On write failure: stay DEACTIVATED |
 | Any grant, lock, screen, call, boundary, VPN or capability event while DEACTIVATED | Ignored; stays DEACTIVATED | No network policy; VPN stays stopped |
 | Ordinary UiOpened | Reconcile existing live state; no grant | PIN screen or setup; opening UI is not process restart |
 | UiOpened during PARENT_MODE, unlocked, no unused permission | Issue ParentAccess with a fresh one-use grant permission; mode unchanged | Parent actions without PIN; Normal unchanged |

@@ -49,7 +49,7 @@ Evaluated against constitution v2.0.0, before research and again after Phase 1 d
 | Principle / gate | Pre-research disposition | Post-design result |
 | --- | --- | --- |
 | I — Unauthorized means DULL | One reducer; memory-only authorization | PASS; every process start is DULL while Active (DEACTIVATED only from a valid saved Deactivated flag), call pause/exclusion is not a grant |
-| I — Active/Deactivated switch (v3.0.0) | Deactivate needs parent-interface access plus confirmation; Activate needs fresh PIN | PASS; only an authenticated parent action writes Deactivated; corrupt/missing/unmigratable settings default to Active |
+| I — Active/Deactivated switch (v3.0.0) | Deactivate needs parent-interface access and the explicit switch action; Activate needs parent-interface access obtained with the PIN | PASS; only an authenticated parent action writes Deactivated; corrupt/missing/unmigratable settings default to Active |
 | I — Explicit authorization | PIN plus explicit action for Parent Mode or Child Play Session | PASS; lock/screen-off revokes Parent Mode |
 | I — Scoped call pause / no loophole | Only per-subscription telephony state pauses | PASS; WhatsApp is "unsupported" under I (countdown continues), game voice chat cannot pause |
 | II — Screen and sound dulling (v3.1.0) | Gradual cycle, touch-transparent overlay, media stream only, brightness restored | PASS; no text to the child, no app blocking, calls/alarms untouched, effects stop during calls and outside DULL |
@@ -168,11 +168,11 @@ Authorization is memory-only, so a grant commits in one reducer step: verify the
 
 ### Active/Deactivated switch (FR-031)
 
-`Mode` gains `DEACTIVATED`. The reducer accepts two new events. `Deactivate` requires valid parent-interface access and a confirmed flag; from any state it clears Parent Mode, child grant, Soft Landing and pause accounting, bumps the generation and emits effects to save `active = false`, stop the VPN and stop the foreground service. `Activate` requires a fresh PIN-derived permission; it emits save `active = true` and start VPN, and moves to DULL (SETUP_REQUIRED presentation if capability is missing). Both commit only after the settings write succeeds; a failed write leaves the prior state and reports the error to the parent.
+`Mode` gains `DEACTIVATED`. The reducer accepts two new events. `Deactivate` requires valid parent-interface access and a confirmed flag; from any state it clears Parent Mode, child grant, Soft Landing and pause accounting, bumps the generation and emits effects to save `active = false`, stop the VPN and stop the foreground service. `Activate` requires valid parent-interface access (the PIN entered to reach Parent options); it emits save `active = true` and start VPN, and moves to DULL (SETUP_REQUIRED presentation if capability is missing). Both commit only after the settings write succeeds; a failed write leaves the prior state and reports the error to the parent.
 
 In DEACTIVATED the reducer ignores grant actions, lock/unlock, screen, call, boundary and VPN-loss events, so nothing re-enters DULL by accident. `SessionManager` starts a new process at DEACTIVATED when the loaded settings are valid and `active == false`, otherwise DULL. `BootReceiver`/package-replaced recovery does not start the VPN while Deactivated. With the VPN stopped there is no VPN or foreground notification; `ProtectionStatus` reports Deactivated, not SETUP_REQUIRED.
 
-UI: Settings shows the switch with one confirmation dialog; the dashboard shows Active/Deactivated; while Deactivated the parent actions screen shows "Activate Kids Garden" and Settings only. All new copy lives in `strings.xml`.
+UI (owner change 2026-10-19): the switch sits at the top of Parent options and takes effect at once in both directions (no pop-up, no second PIN); while Deactivated a warning-colour card there and a banner on the PIN screen say Kids Garden is off, and Parent options shows only the switch and Settings. All new copy lives in `strings.xml`.
 
 ### Compatibility check and background-stop guidance (FR-032, FR-033)
 

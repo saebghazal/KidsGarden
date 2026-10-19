@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -73,14 +71,11 @@ fun SettingsScreen(
     onLimitations: () -> Unit,
     onPrivacy: () -> Unit,
     onEnableCallPause: () -> Unit,
-    onDeactivate: () -> Unit = {},
-    onActivate: () -> Unit = {},
     onEffectSwitch: (ScreenEffect, Boolean) -> Unit = { _, _ -> },
     onBuildUp: (seconds: Int) -> Unit = {},
     onBreak: (seconds: Int) -> Unit = {},
     onCheckPhone: () -> Unit = {},
 ) {
-    var confirmDeactivate by remember { mutableStateOf(false) }
     var lastMethodWarning by remember { mutableStateOf(false) }
     val enabledCount = (if (state.networkEnabled) 1 else 0) + state.enabledEffects.size
 
@@ -92,21 +87,6 @@ fun SettingsScreen(
             lastMethodWarning = false
             change()
         }
-    }
-    if (confirmDeactivate) {
-        AlertDialog(
-            onDismissRequest = { confirmDeactivate = false },
-            text = { Text(stringResource(R.string.deactivate_confirm)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDeactivate = false
-                    onDeactivate()
-                }) { Text(stringResource(R.string.deactivate_confirm_action)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDeactivate = false }) { Text(stringResource(R.string.action_cancel)) }
-            },
-        )
     }
     SetupScaffold(
         title = stringResource(R.string.settings_title),
@@ -130,13 +110,7 @@ fun SettingsScreen(
             )
         }
 
-        Heading(stringResource(R.string.active_heading))
-        LabeledSwitch(
-            label = stringResource(R.string.active_switch_label),
-            checked = state.active,
-            // Off asks once for confirmation; on goes through a fresh PIN entry.
-            onCheckedChange = { on -> if (on) onActivate() else confirmDeactivate = true },
-        )
+        // The Active/Deactivated switch lives at the top of Parent options; here only the state.
         if (!state.active) BodyText(stringResource(R.string.deactivated_status))
 
         Heading(stringResource(R.string.settings_intensity_heading))

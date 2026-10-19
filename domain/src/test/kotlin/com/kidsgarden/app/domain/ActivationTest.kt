@@ -153,10 +153,10 @@ class ActivationTest {
     }
 
     @Test
-    fun activateWithFreshPinReturnsToDullWithNoGrant() {
+    fun activateFromParentInterfaceReturnsToDullWithNoGrant() {
         deactivate()
-        val permission = h.pin()
-        val request = h.send(DomainEvent.ActivateRequested(permission))
+        // The parent is still in the parent interface: no second PIN entry is needed.
+        val request = h.send(DomainEvent.ActivateRequested)
         assertEquals(AuthorizationMode.DEACTIVATED, h.state.mode)
         assertTrue(request.effects.single() is Effect.PersistActive)
 
@@ -165,8 +165,11 @@ class ActivationTest {
         assertEquals(AuthorizationMode.DULL, h.state.mode)
         assertEquals(DisplayMode.DULL, h.state.displayMode)
         assertNull(h.state.childGrant)
-        assertNull(h.state.parentAccess)
+        assertTrue(h.state.parentAccess != null)
+        // Regression (2026-10-19): Activate must not close the parent interface.
+        assertFalse(result.effects.any { it is Effect.ClearParentUiAccess })
         assertTrue(result.effects.any { it is Effect.StartVpn })
+        assertFalse(result.effects.any { it is Effect.ApplyNetworkPolicy && it.policy == NetworkPolicy.Normal })
         assertEquals(NetworkPolicy.Dull(DullIntensity.MEDIUM), h.lastPolicy())
     }
 
@@ -174,7 +177,7 @@ class ActivationTest {
     fun activateWithoutWorkingVpnShowsSetupRequired() {
         deactivate()
         h.send(DomainEvent.VpnCapabilityChanged(VpnCapability.UNAVAILABLE))
-        h.send(DomainEvent.ActivateRequested(h.pin()))
+        h.send(DomainEvent.ActivateRequested)
         h.send(DomainEvent.ActiveWriteSucceeded(active = true))
 
         assertEquals(AuthorizationMode.DULL, h.state.mode)
@@ -183,19 +186,17 @@ class ActivationTest {
     }
 
     @Test
-    fun activateNeedsTheUnusedPermission() {
+    fun activateNeedsParentAccess() {
         deactivate()
-        val permission = h.pin()
-        assertTrue(h.send(DomainEvent.ActivateRequested(permission + 99)).effects.isEmpty())
         h.send(DomainEvent.ParentUiLeft)
-        assertTrue(h.send(DomainEvent.ActivateRequested(permission)).effects.isEmpty())
+        assertTrue(h.send(DomainEvent.ActivateRequested).effects.isEmpty())
         assertEquals(AuthorizationMode.DEACTIVATED, h.state.mode)
     }
 
     @Test
     fun failedActivateWriteStaysDeactivated() {
         deactivate()
-        h.send(DomainEvent.ActivateRequested(h.pin()))
+        h.send(DomainEvent.ActivateRequested)
         h.send(DomainEvent.ActiveWriteFailed(active = true))
 
         assertEquals(AuthorizationMode.DEACTIVATED, h.state.mode)
@@ -211,6 +212,7 @@ class ActivationTest {
         assertNull(h.state.childGrant)
         assertNull(h.state.parentAccess)
         assertFalse(result.effects.any { it is Effect.StartVpn || it is Effect.ApplyNetworkPolicy })
+        assertTrue(result.effects.any { it is Effect.ClearParentUiAccess })
     }
 
     @Test

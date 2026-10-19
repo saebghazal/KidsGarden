@@ -154,15 +154,9 @@
     <string name="parent_mode_exit">Exit Parent Mode</string>
 
     <!-- Active/Deactivated (FR-031, contracts/parent-ui.md, exact where quoted) -->
-    <string name="active_heading">Kids Garden</string>
     <string name="active_switch_label">Kids Garden is on</string>
-    <string name="deactivate_confirm">Turn off Kids Garden? The phone will not be dulled until you turn it back on.</string>
-    <string name="deactivate_confirm_action">Turn off</string>
-    <string name="action_cancel">Cancel</string>
     <string name="deactivated_status">Kids Garden is off. The phone is not dulled.</string>
     <string name="active_status">Kids Garden is on.</string>
-    <string name="action_activate">Activate Kids Garden</string>
-    <string name="activate_failed">Kids Garden could not be turned on. Please try again.</string>
 
     <!-- Compatibility check (FR-032, exact) -->
     <string name="compat_check">Check this phone</string>

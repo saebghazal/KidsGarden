@@ -34,8 +34,8 @@ sealed interface DomainEvent {
     /** Confirmed Deactivate from the parent interface (FR-031). Commits only after the save. */
     data class DeactivateRequested(val confirmed: Boolean) : DomainEvent
 
-    /** Activate with the fresh one-use permission from the PIN entry. Commits only after the save. */
-    data class ActivateRequested(val grantPermission: Long) : DomainEvent
+    /** Activate from the parent interface. Commits only after the save. */
+    data object ActivateRequested : DomainEvent
 
     /** Outcome of saving `active`, reported by SessionManager after a requested switch. */
     data class ActiveWriteSucceeded(val active: Boolean) : DomainEvent

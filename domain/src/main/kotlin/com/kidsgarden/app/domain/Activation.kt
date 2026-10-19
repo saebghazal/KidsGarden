@@ -95,7 +95,7 @@ internal object Activation {
             if (event.interactiveAndUnlocked) unchanged(state.copy(screenOn = true, interactiveAndUnlocked = true))
             else clearParentAccess(state.copy(interactiveAndUnlocked = false))
 
-        is DomainEvent.ActivateRequested -> requestActivate(state, event.grantPermission)
+        DomainEvent.ActivateRequested -> requestActivate(state)
 
         is DomainEvent.ActiveWriteSucceeded ->
             if (event.active && state.pendingActive == true) activate(state) else unchanged(state.copy(pendingActive = null))
@@ -121,22 +121,23 @@ internal object Activation {
         is DomainEvent.DeadlineObserved -> unchanged(state)
     }
 
-    /** Activate needs the unused one-use permission from a fresh PIN entry; it consumes it. */
-    private fun requestActivate(state: AuthorizationState, permission: Long): ReduceResult {
-        val access = state.parentAccess ?: return unchanged(state)
-        if (access.grantPermission != permission || state.pendingActive != null) return unchanged(state)
-        val next = state.copy(pendingActive = true, parentAccess = access.copy(grantPermission = null))
+    /**
+     * Activate from the parent interface (FR-031, owner change 2026-10-19): the switch on
+     * Parent options needs the PIN already entered, not a second one.
+     */
+    private fun requestActivate(state: AuthorizationState): ReduceResult {
+        if (state.parentAccess == null || state.pendingActive != null) return unchanged(state)
+        val next = state.copy(pendingActive = true)
         return ReduceResult(next, listOf(Effect.PersistActive(active = true, generation = next.generation)))
     }
 
     /**
      * `active = true` is saved: DULL with no grant, VPN restarted (SETUP_REQUIRED shows if it
-     * cannot run). Parent access ends, so any later grant needs a new PIN entry.
+     * cannot run). The parent stays in the parent interface; activation itself grants nothing.
      */
     private fun activate(state: AuthorizationState): ReduceResult {
         val next = state.copy(
             mode = AuthorizationMode.DULL,
-            parentAccess = null,
             pendingActive = null,
             generation = state.generation + 1,
         )
@@ -144,7 +145,6 @@ internal object Activation {
             next,
             listOf(
                 Effect.StartVpn(next.generation),
-                Effect.ClearParentUiAccess(next.generation),
                 Effect.ApplyNetworkPolicy(StateMachine.dullPolicy(next), next.generation),
                 Effect.PublishParentStatus(next.generation),
             ),

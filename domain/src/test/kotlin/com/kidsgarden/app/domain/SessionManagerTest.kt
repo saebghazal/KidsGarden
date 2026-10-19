@@ -120,11 +120,11 @@ class SessionManagerTest {
             activationStore = { true },
         )
         assertTrue(manager.deactivate(confirmed = true).exceptionOrNull() is SessionError.StaleRequest)
-        assertTrue(manager.activate(grantPermission = 1L).exceptionOrNull() is SessionError.StaleRequest)
+        assertTrue(manager.activate().exceptionOrNull() is SessionError.StaleRequest)
     }
 
     @Test
-    fun activateWithFreshPermissionStartsVpn() = runTest {
+    fun activateFromParentInterfaceStartsVpn() = runTest {
         val vpn = RecordingVpn()
         val manager = SessionManager(
             FakeTimeProvider(), RecordingSink(), RecordingScheduler(), eagerScope(),
@@ -133,12 +133,11 @@ class SessionManagerTest {
         )
         manager.dispatch(DomainEvent.ProcessStarted(savedActive = false))
         manager.dispatch(DomainEvent.PinVerified)
-        val permission = manager.state.value.grantPermission!!
 
-        assertTrue(manager.activate(permission).isSuccess)
+        assertTrue(manager.activate().isSuccess)
         assertEquals(1, vpn.starts)
         assertEquals(AuthorizationMode.DULL, manager.state.value.authorizationMode)
-        assertFalse(manager.state.value.parentAccessActive)
+        assertTrue(manager.state.value.parentAccessActive)
     }
 
     @Test

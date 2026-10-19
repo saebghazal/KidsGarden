@@ -22,8 +22,8 @@ import com.kidsgarden.app.ui.setup.SetupScaffold
  * [onExitParentMode] is non-null while Parent Mode is on (T055): the screen then offers
  * "Exit Parent Mode" (no PIN needed) in place of "Use phone as parent".
  *
- * [onActivate] is non-null while Kids Garden is Deactivated (FR-031): the screen then offers
- * only "Activate Kids Garden" and Settings.
+ * [onActiveChange] puts the Active/Deactivated switch at the top (FR-031). While
+ * Deactivated ([active] false) grants are not offered; only the switch and Settings remain.
  */
 @Composable
 fun ParentActionScreen(
@@ -34,28 +34,27 @@ fun ParentActionScreen(
     onVpnSetup: () -> Unit,
     onStatus: (() -> Unit)? = null,
     onExitParentMode: (() -> Unit)? = null,
-    onActivate: (() -> Unit)? = null,
-    activateFailed: Boolean = false,
+    active: Boolean = true,
+    onActiveChange: ((Boolean) -> Unit)? = null,
+    switchFailed: Boolean = false,
 ) {
-    if (onActivate != null) {
-        DeactivatedActions(onActivate, onSettings, activateFailed)
-        return
-    }
     SetupScaffold(
         title = stringResource(R.string.actions_title),
         actions = {
-            if (onExitParentMode != null) {
-                OutlinedButton(onClick = onExitParentMode, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.parent_mode_exit))
+            if (active) {
+                if (onExitParentMode != null) {
+                    OutlinedButton(onClick = onExitParentMode, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.parent_mode_exit))
+                    }
+                } else {
+                    Button(onClick = onUseAsParent, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_use_as_parent))
+                    }
                 }
-            } else {
-                Button(onClick = onUseAsParent, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_use_as_parent))
-                }
-            }
-            if (onGiveToChild != null) {
-                Button(onClick = onGiveToChild, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_give_to_child))
+                if (onGiveToChild != null) {
+                    Button(onClick = onGiveToChild, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_give_to_child))
+                    }
                 }
             }
             if (onSettings != null) {
@@ -63,47 +62,29 @@ fun ParentActionScreen(
                     Text(stringResource(R.string.action_settings))
                 }
             }
-            if (onStatus != null) {
+            if (active && onStatus != null) {
                 OutlinedButton(onClick = onStatus, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_status))
                 }
             }
-            if (!protectionReady) {
+            if (active && !protectionReady) {
                 OutlinedButton(onClick = onVpnSetup, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_vpn_setup))
                 }
             }
         },
     ) {
-        BodyText(
-            stringResource(
-                when {
-                    onExitParentMode != null -> R.string.parent_mode_confirmation
-                    protectionReady -> R.string.vpn_status_running
-                    else -> R.string.vpn_limited
-                },
-            ),
-        )
-    }
-}
-
-/** While Deactivated: plain status, Activate, and Settings only. */
-@Composable
-private fun DeactivatedActions(onActivate: () -> Unit, onSettings: (() -> Unit)?, activateFailed: Boolean) {
-    SetupScaffold(
-        title = stringResource(R.string.actions_title),
-        actions = {
-            Button(onClick = onActivate, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.action_activate))
-            }
-            if (onSettings != null) {
-                OutlinedButton(onClick = onSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_settings))
-                }
-            }
-        },
-    ) {
-        BodyText(stringResource(R.string.deactivated_status))
-        if (activateFailed) BodyText(stringResource(R.string.activate_failed))
+        if (onActiveChange != null) ActiveSwitchCard(active = active, onActiveChange = onActiveChange, failed = switchFailed)
+        if (active) {
+            BodyText(
+                stringResource(
+                    when {
+                        onExitParentMode != null -> R.string.parent_mode_confirmation
+                        protectionReady -> R.string.vpn_status_running
+                        else -> R.string.vpn_limited
+                    },
+                ),
+            )
+        }
     }
 }

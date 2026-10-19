@@ -190,7 +190,7 @@ fun KidsGardenNavHost(
                 LaunchedEffect(Unit) { navController.replaceAll(Routes.ACTIONS) }
             }
             val pinViewModel = viewModel { ParentPinViewModel(container.pinManager) }
-            ParentPinScreen(viewModel = pinViewModel, time = container.time, onAccepted = {
+            ParentPinScreen(viewModel = pinViewModel, time = container.time, deactivated = !snapshot.active, onAccepted = {
                 openParentInterface(
                     when {
                         setup?.onboardingComplete != true -> Routes.NOTIFICATIONS
@@ -284,23 +284,17 @@ fun KidsGardenNavHost(
         }
 
         guardedComposable(Routes.ACTIONS, accessActive, denied) {
-            var activateFailed by remember { mutableStateOf(false) }
+            var switchFailed by remember { mutableStateOf(false) }
             ParentActionScreen(
-                // While Deactivated only Activate and Settings are offered (FR-031). Activate uses
-                // the one-use permission from the PIN just entered; success ends parent access.
-                onActivate = if (!snapshot.active) {
-                    {
-                        val permission = snapshot.grantPermission
-                        if (permission == null) {
-                            navController.closeProtectedRoutes()
-                        } else {
-                            scope.launch { activateFailed = session.activate(permission).isFailure }
-                        }
+                // The Active/Deactivated switch at the top (FR-031). The PIN was entered to reach
+                // this screen, so switching needs no second PIN; Deactivate still confirms once.
+                active = snapshot.active,
+                onActiveChange = { on ->
+                    scope.launch {
+                        switchFailed = (if (on) session.activate() else session.deactivate(confirmed = true)).isFailure
                     }
-                } else {
-                    null
                 },
-                activateFailed = activateFailed,
+                switchFailed = switchFailed,
                 protectionReady = snapshot.displayMode != DisplayMode.SETUP_REQUIRED,
                 onUseAsParent = {
                     snapshot.grantPermission?.let { permission ->
@@ -422,9 +416,6 @@ fun KidsGardenNavHost(
                 onLimitations = { navController.navigate(Routes.LIMITATIONS) },
                 onPrivacy = { navController.navigate(Routes.PRIVACY_INFO) },
                 onEnableCallPause = { navController.navigate(Routes.PHONE_STATE) },
-                onDeactivate = { scope.launch { saveFailed = session.deactivate(confirmed = true).isFailure } },
-                // Activate needs a fresh PIN: leave the parent interface; the PIN leads to Activate.
-                onActivate = { session.dispatch(DomainEvent.ParentUiLeft) },
             )
         }
 
@@ -475,7 +466,10 @@ fun KidsGardenNavHost(
             ChildStartedScreen()
             LaunchedEffect(Unit) {
                 delay(CHILD_CONFIRMATION_MS)
+                // The app then steps aside so the child lands on the home screen (owner change
+                // 2026-10-19). Reopening it shows only the PIN entry.
                 navController.replaceAll(Routes.PIN)
+                activity?.moveTaskToBack(true)
             }
         }
     }

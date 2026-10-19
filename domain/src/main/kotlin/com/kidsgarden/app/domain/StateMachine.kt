@@ -71,7 +71,7 @@ object StateMachine {
             is DomainEvent.ActiveWriteFailed -> publish(state.copy(pendingActive = null))
 
             // Already Active.
-            is DomainEvent.ActivateRequested -> unchanged(state)
+            DomainEvent.ActivateRequested -> unchanged(state)
 
             DomainEvent.ScreenOn -> unchanged(state.copy(screenOn = true))
 
