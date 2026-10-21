@@ -281,6 +281,13 @@ description: "Task list for Kids Garden V1"
 - [ ] T123 Record device checks in `specs/001-kids-garden-v1/evidence/qa-results.md` on API 35/36: compatibility failure reasons (second VPN, work profile), OEM background stop, effect cycle timings, screen-off idle battery unchanged (evidence for SC-010, including break timing ±5 s and screen-off battery)
 - [ ] T124 Re-run the privacy storage check (T085): settings allowlist includes `screenEffects` and `brightnessRestore`, still no mode/session/content data — allowlist and effect writes added to `StoragePrivacyTest` 2026-10-19; device run pending
 
+### Owner changes 2026-10-19 and 2026-10-21
+
+- [X] T125 Active/Deactivated switch at the top of Parent options; no pop-up and no second PIN in either direction; red "off" card and PIN-screen banner while Deactivated (FR-031)
+- [X] T126 After "Start play time" the brief confirmation shows, then the app moves to the background (FR-010)
+- [X] T127 Parent options names a missing effect access ("Grey screen needs Display over other apps") and opens it, instead of the VPN setup message
+- [X] T128 PIN credential v2: 180000 PBKDF2 rounds (70% fewer than v1); v1 credentials verified and re-hashed as v2 on the next correct PIN; tests in `PinHasherTest.kt` and `ParentPinManagerTest.kt` (FR-005)
+
 ---
 
 ## Dependencies & Execution Order

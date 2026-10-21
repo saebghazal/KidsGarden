@@ -11,8 +11,8 @@ import javax.crypto.spec.PBEKeySpec
 /**
  * PBKDF2 credential creation and verification (FR-005, research R8).
  *
- * algorithm: Exactly PBKDF2WithHmacSHA256; iterations: Exactly 600000 for credential
- * version 1; derivedKeyLengthBytes: Exactly 32; salt: exactly 16 bytes from SecureRandom.
+ * algorithm: Exactly PBKDF2WithHmacSHA256; iterations: Exactly 180000 for credential version 2
+ * (new credentials) and 600000 for version 1 (verified, then upgraded); derivedKeyLengthBytes: Exactly 32; salt: exactly 16 bytes from SecureRandom.
  *
  * Derivation is slow by design; call from a background dispatcher, never the main thread.
  * Parameters are fixed constants, never taken from stored JSON.
@@ -23,10 +23,10 @@ class PinHasher(
 
     fun create(pin: CharArray): PinCredential {
         val salt = ByteArray(PinCredential.SALT_LENGTH_BYTES).also(random::nextBytes)
-        val derived = derive(pin, salt)
+        val derived = derive(pin, salt, PinCredential.ITERATIONS)
         try {
             return PinCredential(
-                credentialVersion = 1,
+                credentialVersion = PinCredential.CURRENT_VERSION,
                 algorithm = PinCredential.ALGORITHM,
                 iterations = PinCredential.ITERATIONS,
                 derivedKeyLengthBytes = PinCredential.KEY_LENGTH_BYTES,
@@ -47,7 +47,8 @@ class PinHasher(
         }
         val salt = Base64.getDecoder().decode(credential.salt)
         val expected = Base64.getDecoder().decode(credential.hash)
-        val actual = derive(pin, salt)
+        // The round count was validated against the version above, so it is a fixed constant.
+        val actual = derive(pin, salt, credential.iterations)
         try {
             // Constant-time comparison.
             return MessageDigest.isEqual(expected, actual)
@@ -57,8 +58,8 @@ class PinHasher(
         }
     }
 
-    private fun derive(pin: CharArray, salt: ByteArray): ByteArray {
-        val spec = PBEKeySpec(pin, salt, PinCredential.ITERATIONS, PinCredential.KEY_LENGTH_BYTES * 8)
+    private fun derive(pin: CharArray, salt: ByteArray, iterations: Int): ByteArray {
+        val spec = PBEKeySpec(pin, salt, iterations, PinCredential.KEY_LENGTH_BYTES * 8)
         try {
             return SecretKeyFactory.getInstance(PinCredential.ALGORITHM).generateSecret(spec).encoded
         } finally {

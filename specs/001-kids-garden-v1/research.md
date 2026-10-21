@@ -106,7 +106,7 @@ Ordinary I/O failure on a settings write is reported to the parent and does not 
 
 ## R8 — PIN credential and backup
 
-**Decision:** Six ASCII digits; PBKDF2WithHmacSHA256, 600,000 iterations, 16 random salt bytes and a 32-byte verifier. Persist supported parameters/version, salt, and verifier; validate their sizes and work factor before hashing. Off-main derivation, fixed-length digest comparison, best-effort temporary-array clearing, no saved-state PIN, no recovery secret. Volatile five-failure/30-second delay remains.
+**Decision:** Six ASCII digits; PBKDF2WithHmacSHA256, 600,000 iterations, reduced on 2026-10-21 by the owner to 180,000 iterations (credential v2) for a faster unlock, with v1 credentials re-hashed on the next correct PIN; 16 random salt bytes and a 32-byte verifier. Persist supported parameters/version, salt, and verifier; validate their sizes and work factor before hashing. Off-main derivation, fixed-length digest comparison, best-effort temporary-array clearing, no saved-state PIN, no recovery secret. Volatile five-failure/30-second delay remains.
 
 **Evidence:** PBKDF2 SHA256 is Android-available for the target platforms; the work factor follows OWASP's PBKDF2 guidance. [SecretKeyFactory](https://developer.android.com/reference/javax/crypto/SecretKeyFactory), [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [MessageDigest](https://developer.android.com/reference/java/security/MessageDigest)
 

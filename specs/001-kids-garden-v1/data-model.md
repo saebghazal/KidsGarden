@@ -36,9 +36,9 @@ Stored as UTF-8 JSON at an app-private no-backup location, initially `kidsgarden
 
 | Field | Value / validation |
 | --- | --- |
-| credentialVersion | 1 |
+| credentialVersion | 2 (1 accepted and upgraded on the next correct PIN) |
 | algorithm | Exactly PBKDF2WithHmacSHA256 |
-| iterations | Exactly 600000 for credential version 1 |
+| iterations | Exactly 180000 for credential version 2; exactly 600000 for legacy version 1 (owner change 2026-10-21: 70% fewer rounds for a faster unlock) |
 | derivedKeyLengthBytes | Exactly 32 |
 | salt | Base64 decoding to exactly 16 bytes from SecureRandom |
 | hash | Base64 decoding to exactly 32 verifier bytes |

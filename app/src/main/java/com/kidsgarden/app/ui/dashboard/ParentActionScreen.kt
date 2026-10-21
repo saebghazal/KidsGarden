@@ -37,6 +37,9 @@ fun ParentActionScreen(
     active: Boolean = true,
     onActiveChange: ((Boolean) -> Unit)? = null,
     switchFailed: Boolean = false,
+    /** Why grants are unavailable, and the button that fixes it (VPN setup by default). */
+    limitedText: Int = R.string.vpn_limited,
+    fixLabel: Int = R.string.action_vpn_setup,
 ) {
     SetupScaffold(
         title = stringResource(R.string.actions_title),
@@ -69,7 +72,7 @@ fun ParentActionScreen(
             }
             if (active && !protectionReady) {
                 OutlinedButton(onClick = onVpnSetup, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_vpn_setup))
+                    Text(stringResource(fixLabel))
                 }
             }
         },
@@ -81,7 +84,7 @@ fun ParentActionScreen(
                     when {
                         onExitParentMode != null -> R.string.parent_mode_confirmation
                         protectionReady -> R.string.vpn_status_running
-                        else -> R.string.vpn_limited
+                        else -> limitedText
                     },
                 ),
             )

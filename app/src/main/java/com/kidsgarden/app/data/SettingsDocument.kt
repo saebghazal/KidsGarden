@@ -111,9 +111,9 @@ data class ThrottleSettings(
 /**
  * Salted, hardened PIN verifier (FR-005, research R8). Never a raw or reversible PIN.
  *
- * | credentialVersion | 1 |
+ * | credentialVersion | 2 (1 still accepted and upgraded on the next correct PIN) |
  * | algorithm | Exactly PBKDF2WithHmacSHA256 |
- * | iterations | Exactly 600000 for credential version 1 |
+ * | iterations | Exactly 180000 for credential version 2; exactly 600000 for version 1 |
  * | derivedKeyLengthBytes | Exactly 32 |
  * | salt | Base64 decoding to exactly 16 bytes from SecureRandom |
  * | hash | Base64 decoding to exactly 32 verifier bytes |
@@ -128,9 +128,11 @@ data class PinCredential(
     val hash: String,
 ) {
     fun validate() {
-        if (credentialVersion != 1) throw SettingsValidationException("unsupported credentialVersion")
+        val expectedIterations = ITERATIONS_BY_VERSION[credentialVersion]
+            ?: throw SettingsValidationException("unsupported credentialVersion")
         if (algorithm != ALGORITHM) throw SettingsValidationException("unsupported algorithm")
-        if (iterations != ITERATIONS) throw SettingsValidationException("unsupported iterations")
+        // Fixed per version; a work factor is never taken from the stored JSON.
+        if (iterations != expectedIterations) throw SettingsValidationException("unsupported iterations")
         if (derivedKeyLengthBytes != KEY_LENGTH_BYTES) throw SettingsValidationException("unsupported key length")
         if (decodedLength(salt) != SALT_LENGTH_BYTES) throw SettingsValidationException("salt must decode to 16 bytes")
         if (decodedLength(hash) != KEY_LENGTH_BYTES) throw SettingsValidationException("hash must decode to 32 bytes")
@@ -142,9 +144,17 @@ data class PinCredential(
         -1
     }
 
+    /** True when this credential should be re-hashed with the current version. */
+    val outdated: Boolean get() = credentialVersion != CURRENT_VERSION
+
     companion object {
         const val ALGORITHM = "PBKDF2WithHmacSHA256"
-        const val ITERATIONS = 600_000
+
+        /** Owner change 2026-10-21: 70% fewer rounds than v1 for a faster unlock. */
+        const val CURRENT_VERSION = 2
+        const val ITERATIONS = 180_000
+        const val LEGACY_ITERATIONS = 600_000
+        val ITERATIONS_BY_VERSION: Map<Int, Int> = mapOf(1 to LEGACY_ITERATIONS, CURRENT_VERSION to ITERATIONS)
         const val KEY_LENGTH_BYTES = 32
         const val SALT_LENGTH_BYTES = 16
     }

@@ -28,7 +28,7 @@ Errors are typed as CorruptDocument (safe defaults/reset), UnsupportedSchema (sa
 ## Invariants
 
 - One DataStore instance for the file; no multi-process access, direct file writes, per-tick updates or traffic-path storage.
-- Top-level document ≤64 KiB; credential salt is 16 bytes and verifier 32 bytes after decoding; iteration count exactly 600000 for credential v1.
+- Top-level document ≤64 KiB; credential salt is 16 bytes and verifier 32 bytes after decoding; iteration count exactly 180000 for credential v2 and 600000 for legacy v1.
 - `screenEffects` and `brightnessRestore` (nullable) are required in v2; at least one dulling method is enabled after setup completion.
 - `active` is required in v2; defaults, corruption replacement and migration always produce `active = true`.
 - `softLandingDurationSeconds ∈ {60,120}`; intensity ∈ {GENTLE,MEDIUM,STRONG}.

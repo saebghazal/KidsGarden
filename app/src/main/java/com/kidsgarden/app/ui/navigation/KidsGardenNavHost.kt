@@ -4,7 +4,9 @@ import android.content.Intent
 import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
+import com.kidsgarden.app.R
 import com.kidsgarden.app.domain.EffectAccess
+import com.kidsgarden.app.domain.ParentFacingSnapshot
 import com.kidsgarden.app.domain.EffectCycle
 import com.kidsgarden.app.domain.ScreenEffect
 import com.kidsgarden.app.ui.dashboard.methodStatuses
@@ -318,7 +320,27 @@ fun KidsGardenNavHost(
                 },
                 onGiveToChild = { navController.navigate(Routes.CHILD_DURATION) },
                 onSettings = { navController.navigate(Routes.SETTINGS) },
-                onVpnSetup = { navController.navigate(Routes.VPN) },
+                // When nothing dulls the phone, name what is missing: an enabled effect without its
+                // Android access comes first (the VPN may be switched off on purpose).
+                limitedText = when {
+                    missingAccess(snapshot, ScreenEffect.GREY_SCREEN) -> R.string.grey_needs_access
+                    missingAccess(snapshot, ScreenEffect.LOWER_BRIGHTNESS) -> R.string.brightness_needs_access
+                    else -> R.string.vpn_limited
+                },
+                fixLabel = when {
+                    missingAccess(snapshot, ScreenEffect.GREY_SCREEN) -> R.string.overlay_open
+                    missingAccess(snapshot, ScreenEffect.LOWER_BRIGHTNESS) -> R.string.settings_write_open
+                    else -> R.string.action_vpn_setup
+                },
+                onVpnSetup = {
+                    navController.navigate(
+                        when {
+                            missingAccess(snapshot, ScreenEffect.GREY_SCREEN) -> Routes.OVERLAY_ACCESS
+                            missingAccess(snapshot, ScreenEffect.LOWER_BRIGHTNESS) -> Routes.WRITE_SETTINGS_ACCESS
+                            else -> Routes.VPN
+                        },
+                    )
+                },
                 onStatus = { navController.navigate(Routes.DASHBOARD) },
             )
         }
@@ -512,3 +534,7 @@ fun NavController.closeProtectedRoutes() {
     val current = currentDestination?.route ?: return
     if (current in Routes.protected) replaceAll(Routes.PIN)
 }
+
+/** The parent switched [effect] on but Android access for it is not granted. */
+private fun missingAccess(snapshot: ParentFacingSnapshot, effect: ScreenEffect): Boolean =
+    effect in snapshot.enabledEffects && snapshot.effectAccess[effect] == EffectAccess.ACCESS_MISSING
