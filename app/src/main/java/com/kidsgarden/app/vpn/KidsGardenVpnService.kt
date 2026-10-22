@@ -58,6 +58,11 @@ class KidsGardenVpnService : VpnService() {
             if (tun == null && startJob?.isActive != true) stopSelf(startId)
             return START_NOT_STICKY
         }
+        if (!controller.isStartAllowed()) {
+            controller.onTunnelClosed(VpnUnavailableReason.DEACTIVATED)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (!enterForeground()) {
             controller.onTunnelClosed(VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
             stopSelf(startId)

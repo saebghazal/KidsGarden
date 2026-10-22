@@ -128,9 +128,6 @@
     <string name="settings_ramp_heading">Soft Landing</string>
     <string name="ramp_one_minute">1 minute</string>
     <string name="ramp_two_minutes">2 minutes</string>
-    <string name="settings_vpn_heading">VPN</string>
-    <string name="settings_vpn_stop">Stop VPN dulling</string>
-    <string name="settings_vpn_start">Start VPN dulling</string>
     <string name="settings_vpn_android_note">Android’s own VPN settings can still turn the VPN off. The Kids Garden PIN does not protect them.</string>
     <string name="settings_change_pin">Change PIN</string>
     <string name="settings_limitations">Limitations</string>
@@ -155,4 +152,63 @@
 
     <!-- Parent Mode exit (T055); no timer -->
     <string name="parent_mode_exit">Exit Parent Mode</string>
+
+    <!-- Active/Deactivated (FR-031, contracts/parent-ui.md, exact where quoted) -->
+    <string name="active_switch_label">Kids Garden is on</string>
+    <string name="deactivated_status">Kids Garden is off. The phone is not dulled.</string>
+    <string name="active_status">Kids Garden is on.</string>
+
+    <!-- Compatibility check (FR-032, exact) -->
+    <string name="compat_check">Check this phone</string>
+    <string name="compat_checking">Checking this phone…</string>
+    <string name="compat_pass">This phone can be dulled.</string>
+    <string name="compat_other_vpn">Another VPN app is using the VPN slot.</string>
+    <string name="compat_policy_blocked">A device or work policy blocks VPN apps on this phone.</string>
+    <string name="compat_no_consent">VPN permission was not given.</string>
+    <string name="compat_fgs_not_allowed">Android did not allow Kids Garden to run in the background.</string>
+    <string name="compat_no_traffic">Network traffic did not pass through Kids Garden.</string>
+    <string name="compat_remedy_other_vpn">Turn off the other VPN app in Android settings, then check again.</string>
+    <string name="compat_remedy_policy">This phone cannot slow the internet. You can use the screen and sound effects instead.</string>
+    <string name="compat_remedy_no_consent">Tap “Set up VPN” and allow the VPN connection.</string>
+    <string name="compat_remedy_fgs">Allow Kids Garden to run in the background in Android’s battery settings, then check again.</string>
+    <string name="compat_remedy_no_traffic">Restart the phone and check again. You can also use the screen and sound effects.</string>
+    <string name="compat_offer_effects">The network on this phone cannot be dulled. You can turn on the screen and sound effects in Settings instead.</string>
+    <string name="action_use_effects">Use screen and sound effects</string>
+
+    <!-- Background stop (FR-033, exact where quoted) -->
+    <string name="background_stopped">Android stopped Kids Garden in the background.</string>
+    <string name="background_guidance">Some phones stop apps to save battery. To keep Kids Garden running, set its battery use to “Unrestricted” or remove it from battery optimisation on the next screen.</string>
+    <string name="background_show_settings">Show battery settings</string>
+
+    <!-- Dulling methods (FR-034–036, exact where quoted) -->
+    <string name="methods_heading">Dulling methods</string>
+    <string name="method_network">Network dulling</string>
+    <string name="method_grey">Grey screen</string>
+    <string name="method_volume">Lower media volume</string>
+    <string name="method_brightness">Lower brightness</string>
+    <string name="method_working">Working</string>
+    <string name="method_off">Off</string>
+    <string name="method_access_missing">Needs access</string>
+    <string name="method_unavailable">Not available on this phone</string>
+    <string name="method_not_running">Not running</string>
+    <string name="method_status">%1$s: %2$s</string>
+    <string name="method_last">At least one dulling method must stay on. To turn Kids Garden off, use Deactivate.</string>
+    <string name="grey_needs_access">Grey screen needs Display over other apps.</string>
+    <string name="brightness_needs_access">Lower brightness needs Modify system settings.</string>
+    <string name="effect_build_up_heading">Build-up time</string>
+    <string name="effect_break_heading">Break time</string>
+    <string name="effect_break_none">No break</string>
+    <plurals name="effect_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+
+    <!-- Effect access explanations (FR-036, T116) -->
+    <string name="overlay_title">Grey screen</string>
+    <string name="overlay_body">The grey screen slowly washes out colours while the phone is in Dull Mode. It never blocks touches and never shows a message. Android will open “Display over other apps”; turn it on for Kids Garden, then come back.</string>
+    <string name="overlay_open">Open Display over other apps</string>
+    <string name="settings_write_title">Lower brightness</string>
+    <string name="settings_write_body">Lower brightness slowly dims the screen while the phone is in Dull Mode and puts your brightness back when it stops. Android will open “Modify system settings”; turn it on for Kids Garden, then come back.</string>
+    <string name="settings_write_open">Open Modify system settings</string>
+    <string name="access_granted">Access is on.</string>
 </resources>

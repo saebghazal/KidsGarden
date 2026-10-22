@@ -8,13 +8,13 @@
 | --- | --- | --- |
 | 1. First Setup | Unenrolled device only; welcome, local-only/no-content/no-logs, normal-app limits, create PIN | No account/factory reset; interrupt/resume without authorization |
 | 2. Create PIN | One-to-six-digit numeric masked entry + confirmation; enrollment only when credential absent/invalid | Non-numeric or wrong length rejected; credential persisted securely before advancing; no raw PIN saved state |
-| 3. VPN Setup | Enrolled parent gate; explanation before system consent, live status, limited capability reasons. Also hosts the explanation steps shown before the POST_NOTIFICATIONS and READ_PHONE_STATE prompts | No “protected” on saved flag or consent alone; denial calm |
+| 3. VPN Setup | Enrolled parent gate; explanation before system consent, then the compatibility check (FR-032) with “This phone can be dulled” or one reason and remedy; if the VPN fails, offer screen and sound effects. Live status, limited capability reasons. Also hosts the explanation steps shown before the POST_NOTIFICATIONS and READ_PHONE_STATE prompts | No “protected” on saved flag or consent alone; denial calm |
 | 4. Parent PIN | Default enrolled app entry; volatile retry delay and calm wrong-PIN text | Correct PIN opens actions only; DULL unchanged |
-| 5. Parent Actions | Authenticated parent; Use phone as parent / Give phone to child / Settings. During PARENT_MODE: reached without PIN while unlocked; “Exit Parent Mode” (no PIN) replaces “Use phone as parent”, with ends-on-lock text | Fresh one-use grant permission for new grants |
+| 5. Parent Actions | Authenticated parent; Use phone as parent / Give phone to child / Settings. During PARENT_MODE: reached without PIN while unlocked; “Exit Parent Mode” (no PIN) replaces “Use phone as parent”, with ends-on-lock text. Active/Deactivated switch at the top (no pop-up and no second PIN in either direction). While DEACTIVATED: the switch, a warning-colour “Kids Garden is off” card and Settings only | Fresh one-use grant permission for new grants; Activate needs current parent access |
 | 6. Parent Mode start | No window: once PARENT_MODE commits the app moves to the background; no timer | Switch to other apps preserves phone authorization while unlocked; reopening UI during PARENT_MODE shows route 5 without PIN; after lock the PIN is required |
 | 7. Give Phone To Child | Authenticated duration selection: up/down arrows, 10–120 minutes in 10-minute steps, then Start | Start atomically clears parent access; brief inert confirmation cannot expose Settings or stale back-stack routes |
-| 8. Dashboard | Authenticated; current mode, real VPN status, intensity, setup, remaining child play | During call pause show frozen parent-only remainder; never export history |
-| 9. Settings | Authenticated; PIN change, intensity, VPN controls, 60/120-second ramp, privacy/limits | Current PIN needed for PIN change; settings don't change current child target/deadlines except explicit new grant |
+| 8. Dashboard | Authenticated; Active/Deactivated, which dulling methods are working, background-stop message with optional battery guidance (FR-033), current mode, real VPN status, intensity, setup, remaining child play; when no method works (SETUP_REQUIRED), a “Check this phone” button (FR-032) | During call pause show frozen parent-only remainder; while Deactivated state plainly that the phone is not dulled; never export history |
+| 9. Settings | Authenticated; four dulling method switches (Network, Grey screen, Lower media volume, Lower brightness) with build-up and break times, “Check this phone” (FR-032), PIN change, intensity, VPN controls, 60/120-second ramp, privacy/limits | The Active/Deactivated switch is on Parent options; the shown state reflects saved state only after the write succeeds. Current PIN needed for PIN change; settings don't change current child target/deadlines except explicit new grant |
 | 10. V1 Limitations | Parent-facing explanatory route; includes privacy and local VPN explanation | No uninstall-proof/full-control/total-blocking/universal-call claim |
 
 Privacy explanation may be a Settings route/section rather than an extra top-level screen.
@@ -25,7 +25,7 @@ No raw PIN in SavedStateHandle, rememberSaveable, navigation arguments, Bundle, 
 
 ParentAccess clears on screen off/lock, leaving the interface, PIN change, process death and child-session start. Back navigation, recents restoration, notification taps and deep links all re-evaluate the gate; hiding a button is insufficient. No exported intent can assert “PIN verified.”
 
-Child start consumes fresh grant permission, clears authenticated routes and shows only a brief noninteractive confirmation. There is no “Hand over phone” action the parent must remember. Return to the neutral PIN entry on later interaction. No child countdown/warning surface is added.
+Child start consumes fresh grant permission, clears authenticated routes and shows only a brief noninteractive confirmation, then moves the app to the background so the child lands on the home screen (owner change 2026-10-19). There is no “Hand over phone” action the parent must remember. Return to the neutral PIN entry on later interaction. No child countdown/warning surface is added.
 
 Detectable active phone calls automatically preserve appropriate phone state and pause/resume child play without PIN, confirmation, modal, sound or vibration. They do not reopen parent UI access. A call-driven departure from the parent interface still clears its UI token; Parent Mode phone authorization follows lock rules.
 
@@ -37,6 +37,12 @@ Allowed parent copy includes:
 - VPN missing: “Dull Mode is limited until VPN setup is complete.”
 - Call permission/detection missing or unavailable: “Play time pauses during normal phone calls. Calls in other apps, such as WhatsApp, are not slowed down but do not pause play time.”
 - Storage issue: “Settings could not be saved. Please try again.”
+- Compatibility pass: “This phone can be dulled.”
+- Compatibility failures: “Another VPN app is using the VPN slot.” / “A device or work policy blocks VPN apps on this phone.” / “VPN permission was not given.” / “Android did not allow Kids Garden to run in the background.” / “Network traffic did not pass through Kids Garden.”
+- Background stop: “Android stopped Kids Garden in the background.” with “Show battery settings”
+- Effect access missing: “Grey screen needs Display over other apps.” / “Lower brightness needs Modify system settings.”
+- Last method: “At least one dulling method must stay on. To turn Kids Garden off, use Deactivate.”
+- Deactivated status: “Kids Garden is off. The phone is not dulled.”
 - Normal-app limits: “Kids Garden can be uninstalled or stopped through Android settings.”
 - Privacy: “Settings stay on this phone. Kids Garden does not collect content, activity history, or logs.”
 
@@ -48,6 +54,6 @@ Child-facing forbidden wording includes “You are blocked,” “Your parent re
 
 ## UI validation
 
-Compose tests cover each screen and route guard; PIN success/wrong/retry; interrupted enrollment; failed save; consent denied/revoked; start-parent/start-child; back/notification entry after child start; settings effects; no lingering privileged controls; font scaling, TalkBack labels and focus order.
+Compose tests cover each screen and route guard; PIN success/wrong/retry; interrupted enrollment; failed save; consent denied/revoked; start-parent/start-child; back/notification entry after child start; settings effects; compatibility pass and each failure; method switches including last-method guard; access explanation before overlay and modify-settings prompts; battery guidance button; switching off and on with no pop-up and no PIN, failed save; actions screen while Deactivated; no lingering privileged controls; font scaling, TalkBack labels and focus order.
 
 Use fake platform adapters in instrumented UI tests only. Keep real device VPN consent/lifecycle and call-proof checks in the platform matrix. Screenshot files, if needed by external test tooling with synthetic data, are development artifacts and never product-collected screenshots.

@@ -113,4 +113,26 @@ class ParentPinManagerTest {
         manager.enroll(pin("123456"), pin("123456"))
         assertFalse(file.readText().contains("123456"))
     }
+
+    @Test
+    fun legacyCredentialIsUpgradedOnTheNextCorrectPin() = runTest {
+        val file = File(tmp.root, "legacy.json")
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val repo = SettingsRepository(TestSettingsStores.forFile(file, CoroutineScope(backgroundScope.coroutineContext + dispatcher)))
+        repo.createParentCredential(LegacyCredentials.v1("2580")).getOrThrow()
+        val manager = ParentPinManager(repo, PinHasher(), clock, hashDispatcher = dispatcher)
+
+        // A wrong PIN never upgrades.
+        assertEquals(PinOutcome.Mismatch, manager.verify(pin("1111")))
+        assertEquals(1, repo.load().getOrThrow().pinCredential!!.credentialVersion)
+
+        assertEquals(PinOutcome.Accepted, manager.verify(pin("2580")))
+        val upgraded = repo.load().getOrThrow().pinCredential!!
+        assertEquals(2, upgraded.credentialVersion)
+        assertEquals(180_000, upgraded.iterations)
+
+        // Same PIN still works after the upgrade; the old one is gone.
+        assertEquals(PinOutcome.Accepted, manager.verify(pin("2580")))
+        assertEquals(PinOutcome.Mismatch, manager.verify(pin("2581")))
+    }
 }

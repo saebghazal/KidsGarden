@@ -4,21 +4,34 @@ import android.content.Context
 import com.kidsgarden.app.calls.TelephonyCallStateMonitor
 import com.kidsgarden.app.data.DataStoreProvider
 import com.kidsgarden.app.data.SettingsDocument
+import com.kidsgarden.app.data.BrightnessRestore
 import com.kidsgarden.app.data.SettingsRepository
+import com.kidsgarden.app.domain.ActivationStore
+import com.kidsgarden.app.effects.AndroidEffectOutputs
+import com.kidsgarden.app.effects.BrightnessDimmer
+import com.kidsgarden.app.effects.BrightnessStore
+import com.kidsgarden.app.effects.EffectCapabilityProvider
+import com.kidsgarden.app.effects.GreyOverlay
+import com.kidsgarden.app.effects.MediaVolumeCap
+import com.kidsgarden.app.effects.ScreenEffectsController
+import com.kidsgarden.app.effects.defaultEffectTiming
 import com.kidsgarden.app.domain.DomainEvent
 import com.kidsgarden.app.domain.DullIntensity
 import com.kidsgarden.app.domain.SessionManager
 import com.kidsgarden.app.domain.TimeProvider
+import com.kidsgarden.app.domain.VpnLifecycle
 import com.kidsgarden.app.permissions.AndroidSetupStatusProvider
 import com.kidsgarden.app.permissions.PermissionStatusProvider
 import com.kidsgarden.app.platform.time.AndroidTimeProvider
 import com.kidsgarden.app.receivers.DeviceEventCoordinator
 import com.kidsgarden.app.security.ParentPinManager
 import com.kidsgarden.app.security.PinHasher
+import com.kidsgarden.app.vpn.AndroidCompatibilityProbe
 import com.kidsgarden.app.vpn.AndroidVpnServiceLauncher
 import com.kidsgarden.app.vpn.ServiceBoundaryScheduler
 import com.kidsgarden.app.vpn.Tun2SocksForwardingEngine
 import com.kidsgarden.app.vpn.VpnDullingController
+import com.kidsgarden.app.vpn.VpnUnavailableReason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +68,13 @@ class AppContainer(context: Context) {
 
     private val storageAvailable = MutableStateFlow(true)
 
+    /**
+     * Active/Deactivated as last committed in this process. Set by Activate/Deactivate
+     * before the VPN starts or stops, so a start never races the settings collector.
+     */
+    @Volatile
+    private var activeNow: Boolean? = null
+
     val pinManager = ParentPinManager(settingsRepository, PinHasher(), time)
 
     /** Applies network policy. Started only from the visible parent setup flow (T046). */
@@ -63,6 +83,28 @@ class AppContainer(context: Context) {
         launcher = AndroidVpnServiceLauncher(appContext),
         profiles = { _settings.value?.vpnDullingConfiguration ?: SettingsDocument.DEFAULT_PROFILES },
         selectedIntensity = { _settings.value?.dullIntensity ?: DullIntensity.MEDIUM },
+        // Deactivated is read from the saved setting itself, so nothing restarts the VPN then.
+        startAllowed = { activeNow ?: (_settings.value?.active != false) },
+        probe = AndroidCompatibilityProbe(appContext),
+    )
+
+    /** Live access for the three screen and sound effects (FR-036). */
+    val effectCapability = EffectCapabilityProvider(appContext)
+
+    /** Grey screen, media volume and brightness (T115). Runs on the main thread. */
+    val screenEffects = ScreenEffectsController(
+        outputs = AndroidEffectOutputs(GreyOverlay(appContext), MediaVolumeCap(appContext), BrightnessDimmer(appContext)),
+        brightness = object : BrightnessStore {
+            override fun current(): BrightnessRestore? = _settings.value?.brightnessRestore
+            override suspend fun save(value: BrightnessRestore?): Boolean =
+                settingsRepository.saveBrightnessRestore(value).isSuccess
+        },
+        timing = {
+            _settings.value?.screenEffects?.let { it.buildUpSeconds * 1_000L to it.breakSeconds * 1_000L }
+                ?: defaultEffectTiming()
+        },
+        elapsed = time::elapsedRealtimeMillis,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     )
 
     /** Normal phone calls only (T061). Started at process start; restarts when permission changes. */
@@ -76,6 +118,21 @@ class AppContainer(context: Context) {
         },
         scope = appScope,
         callSource = callMonitor,
+        activationStore = ActivationStore { active -> settingsRepository.updateActive(active).isSuccess },
+        vpnLifecycle = object : VpnLifecycle {
+            // Activate: restart network dulling if the parent has it on; consent is rechecked.
+            override fun startVpn() {
+                activeNow = true
+                val document = _settings.value ?: return
+                if (document.vpnDullingEnabled && document.setup.onboardingComplete) vpnController.requestStart()
+            }
+
+            override fun stopVpn() {
+                activeNow = false
+                vpnController.stop(VpnUnavailableReason.DEACTIVATED)
+            }
+        },
+        effectSink = screenEffects,
     )
 
     /** Screen-off, unlock, and sampled lock state, reported as domain events (T056). */
@@ -99,7 +156,7 @@ class AppContainer(context: Context) {
             try {
                 withTimeoutOrNull(RECOVERY_BUDGET_MS) {
                     val document = settings.filterNotNull().first()
-                    if (document.vpnDullingEnabled && document.setup.onboardingComplete) {
+                    if (document.active && document.vpnDullingEnabled && document.setup.onboardingComplete) {
                         vpnController.requestStart()
                     }
                 }
@@ -118,20 +175,34 @@ class AppContainer(context: Context) {
                 .catch { error ->
                     if (error !is IOException) throw error
                     storageAvailable.value = false
+                    // Unreadable settings mean Active (FR-031): start at DULL.
+                    if (first) sessionManager.dispatch(DomainEvent.ProcessStarted(savedActive = true))
+                    first = false
                 }
                 .collect { document ->
                     storageAvailable.value = true
                     _settings.value = document
-                    if (first && DataStoreProvider.repairedSinceStart) {
-                        sessionManager.dispatch(DomainEvent.SettingsInvalid)
+                    sessionManager.dispatch(DomainEvent.SettingsChanged(document.toDomainSettings()))
+                    if (first) {
+                        // Brightness left lowered by process death goes back first (FR-034c).
+                        screenEffects.restoreLeftover()
+                        // A new process starts at DULL with no grant (FR-027), or at
+                        // DEACTIVATED when valid saved settings say so (FR-031). Repaired
+                        // settings are defaults, which are Active.
+                        val repaired = DataStoreProvider.repairedSinceStart
+                        activeNow = document.active || repaired
+                        if (repaired) sessionManager.dispatch(DomainEvent.SettingsInvalid)
+                        sessionManager.dispatch(DomainEvent.ProcessStarted(savedActive = document.active && !repaired))
                     }
                     first = false
-                    sessionManager.dispatch(DomainEvent.SettingsChanged(document.toDomainSettings()))
                 }
         }
         callMonitor.start()
         appScope.launch {
             callMonitor.observations.collect { sessionManager.dispatch(DomainEvent.CallAggregateChanged(it)) }
+        }
+        appScope.launch {
+            effectCapability.access.collect { sessionManager.dispatch(DomainEvent.EffectCapabilityChanged(it)) }
         }
         appScope.launch {
             callMonitor.capability.collect { sessionManager.dispatch(DomainEvent.CallCapabilityChanged(it)) }

@@ -52,9 +52,55 @@ class SettingsRepository(
         return update { it.copy(softLandingDurationSeconds = seconds) }
     }
 
-    /** Stores the preference only. Callers revoke authorization before acknowledging a stop. */
+    /**
+     * Stores the Network dulling preference only. Callers revoke authorization before
+     * acknowledging a stop. Turning it off is rejected when no other method is on (FR-023).
+     */
     suspend fun updateVpnPreference(enabled: Boolean): Result<SettingsDocument> =
-        update { it.copy(vpnDullingEnabled = enabled) }
+        update { requireAnyMethod(it.copy(vpnDullingEnabled = enabled)) }
+
+    /**
+     * Active/Deactivated (FR-031). Only SessionManager calls it, after a confirmed Deactivate
+     * or an authenticated Activate. On failure the previous value stays in effect.
+     */
+    suspend fun updateActive(active: Boolean): Result<SettingsDocument> =
+        update { it.copy(active = active) }
+
+    /** The four dulling-method switches (FR-036). All four off is rejected. */
+    suspend fun updateMethodSwitches(network: Boolean, grey: Boolean, volume: Boolean, brightness: Boolean): Result<SettingsDocument> {
+        if (!network && !grey && !volume && !brightness) {
+            return Result.failure(SettingsFailure.InvalidValue("at least one dulling method must stay on"))
+        }
+        return update {
+            it.copy(
+                vpnDullingEnabled = network,
+                screenEffects = it.screenEffects.copy(
+                    greyScreenEnabled = grey,
+                    lowerVolumeEnabled = volume,
+                    lowerBrightnessEnabled = brightness,
+                ),
+            )
+        }
+    }
+
+    /** Shared cycle timings; values outside the allowed sets are rejected. */
+    suspend fun updateEffectTiming(buildUpSeconds: Int, breakSeconds: Int): Result<SettingsDocument> =
+        update { it.copy(screenEffects = it.screenEffects.copy(buildUpSeconds = buildUpSeconds, breakSeconds = breakSeconds)) }
+
+    /**
+     * Called by ScreenEffectsController only: set once before the first brightness change in
+     * a DULL period, cleared (null) after restore.
+     */
+    suspend fun saveBrightnessRestore(value: BrightnessRestore?): Result<SettingsDocument> =
+        update { it.copy(brightnessRestore = value) }
+
+    /** After setup, at least one dulling method must stay on (FR-023). */
+    private fun requireAnyMethod(document: SettingsDocument): SettingsDocument {
+        if (document.setup.onboardingComplete && !document.anyMethodEnabled) {
+            throw SettingsValidationException("at least one dulling method must stay on")
+        }
+        return document
+    }
 
     suspend fun updateSetupFlags(flags: SetupFlags): Result<SettingsDocument> =
         update { current ->

@@ -23,6 +23,9 @@ enum class VpnUnavailableReason {
     ENGINE_FAILED,
     REVOKED,
     STOPPED,
+
+    /** The parent deactivated Kids Garden: intentionally off, not an error (FR-031). */
+    DEACTIVATED,
 }
 
 /**
@@ -34,6 +37,32 @@ data class VpnCapabilitySnapshot(
     val reason: VpnUnavailableReason?,
     val exclusions: ExclusionStatus? = null,
 )
+
+/** Result of the local compatibility check (FR-032). Runtime only; never stored. */
+sealed interface CompatibilityResult {
+    data object Pass : CompatibilityResult
+    data class Failed(val reason: CompatibilityFailure) : CompatibilityResult
+}
+
+enum class CompatibilityFailure {
+    NO_CONSENT,
+    POLICY_BLOCKED,
+    OTHER_VPN,
+    FGS_NOT_ALLOWED,
+    NO_TRAFFIC,
+}
+
+/**
+ * Local platform facts for the compatibility check. Reads only on-device state: no network
+ * request, no remote destination.
+ */
+interface CompatibilityProbe {
+    /** A device or work policy forbids configuring VPNs. */
+    fun vpnBlockedByPolicy(): Boolean
+
+    /** Another app's VPN is active (checked only while ours is not running). */
+    fun otherVpnActive(): Boolean
+}
 
 /** Starts the VPN service and checks live consent. Implemented with Android in the app. */
 interface VpnServiceLauncher {
@@ -66,6 +95,9 @@ class VpnDullingController(
     private val profiles: () -> Map<DullIntensity, ThrottleSettings>,
     private val selectedIntensity: () -> DullIntensity,
     private val startTimeoutMillis: Long = DEFAULT_START_TIMEOUT_MS,
+    /** False while the parent has Kids Garden Deactivated; the VPN never starts then. */
+    private val startAllowed: () -> Boolean = { true },
+    private val probe: CompatibilityProbe? = null,
 ) : NetworkPolicySink {
 
     private val mutex = Mutex()
@@ -94,6 +126,9 @@ class VpnDullingController(
     private var exclusionStatus: ExclusionStatus? = null
 
     fun consentGranted(): Boolean = launcher.consentGranted()
+
+    /** The service checks this on every start command, so nothing restarts it while Deactivated. */
+    fun isStartAllowed(): Boolean = startAllowed()
 
     override suspend fun apply(policy: NetworkPolicy, generation: Long, validUntilElapsedMillis: Long?) {
         mutex.withLock {
@@ -129,6 +164,7 @@ class VpnDullingController(
     fun requestStart(): VpnCapabilitySnapshot {
         val current = _capability.value
         if (current.capability == VpnCapability.RUNNING || current.capability == VpnCapability.STARTING) return current
+        if (!startAllowed()) return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.DEACTIVATED)
         if (!launcher.consentGranted()) return report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.CONSENT_MISSING)
         report(VpnCapability.STARTING, null)
         return try {
@@ -139,6 +175,32 @@ class VpnDullingController(
         } catch (_: SecurityException) {
             report(VpnCapability.UNAVAILABLE, VpnUnavailableReason.FOREGROUND_NOT_ALLOWED)
         }
+    }
+
+    /**
+     * The phone compatibility check (T117, FR-032), run from a visible parent screen. In
+     * order: VPN consent, a VPN-blocking policy, another active VPN, then a real start, which
+     * proves foreground-service eligibility and, through the engine's local probe, that
+     * traffic passes through the TUN. The probe goes to a TEST-NET address that the relay
+     * consumes, so nothing leaves the device. A Pass leaves the VPN running. Nothing is
+     * stored or logged, and no grant is created.
+     */
+    suspend fun checkCompatibility(): CompatibilityResult {
+        if (!launcher.consentGranted()) return CompatibilityResult.Failed(CompatibilityFailure.NO_CONSENT)
+        if (probe?.vpnBlockedByPolicy() == true) return CompatibilityResult.Failed(CompatibilityFailure.POLICY_BLOCKED)
+        if (_capability.value.capability == VpnCapability.RUNNING) return CompatibilityResult.Pass
+        if (probe?.otherVpnActive() == true) return CompatibilityResult.Failed(CompatibilityFailure.OTHER_VPN)
+        val outcome = start()
+        if (outcome.capability == VpnCapability.RUNNING) return CompatibilityResult.Pass
+        return CompatibilityResult.Failed(
+            when (outcome.reason) {
+                VpnUnavailableReason.CONSENT_MISSING -> CompatibilityFailure.NO_CONSENT
+                VpnUnavailableReason.FOREGROUND_NOT_ALLOWED -> CompatibilityFailure.FGS_NOT_ALLOWED
+                VpnUnavailableReason.ESTABLISH_FAILED -> CompatibilityFailure.POLICY_BLOCKED
+                VpnUnavailableReason.REVOKED -> CompatibilityFailure.OTHER_VPN
+                else -> CompatibilityFailure.NO_TRAFFIC
+            },
+        )
     }
 
     /** Idempotent. Shuts the service down if it runs; otherwise just reports [reason]. */

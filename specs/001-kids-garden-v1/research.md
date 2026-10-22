@@ -62,7 +62,7 @@ Build only the required arm64-v8a and x86_64 ABIs initially. Validate native pac
 
 **Rationale:** Do not misuse dataSync, phoneCall, device admin, exact-alarm access, or battery exemptions to keep an unrelated service alive. Denial of POST_NOTIFICATIONS does not justify claiming all system foreground indications are hidden. Denial of READ_PHONE_STATE only disables call pause.
 
-Boot/update execution starts at DULL with no grant (authorization is memory-only, R7). The service may recover only when Android permits; no pre-unlock/force-stop enforcement promise. Initial distribution does not require always-on or lockdown; opt out of always-on support until validated rather than advertise it accidentally.
+Boot/update execution starts at DULL with no grant (authorization is memory-only, R7), or at DEACTIVATED without starting the VPN when the parent has saved Deactivated (FR-031). The service may recover only when Android permits; no pre-unlock/force-stop enforcement promise. Initial distribution does not require always-on or lockdown; opt out of always-on support until validated rather than advertise it accidentally.
 
 **Alternatives considered:** `specialUse` is not an automatic fallback for failed eligibility; it needs a valid documented use/declaration. A persisted VPN flag is not consent or live capability.
 
@@ -106,7 +106,7 @@ Ordinary I/O failure on a settings write is reported to the parent and does not 
 
 ## R8 — PIN credential and backup
 
-**Decision:** Six ASCII digits; PBKDF2WithHmacSHA256, 600,000 iterations, 16 random salt bytes and a 32-byte verifier. Persist supported parameters/version, salt, and verifier; validate their sizes and work factor before hashing. Off-main derivation, fixed-length digest comparison, best-effort temporary-array clearing, no saved-state PIN, no recovery secret. Volatile five-failure/30-second delay remains.
+**Decision:** Six ASCII digits; PBKDF2WithHmacSHA256, 600,000 iterations, reduced on 2026-10-21 by the owner to 180,000 iterations (credential v2) for a faster unlock, with v1 credentials re-hashed on the next correct PIN; 16 random salt bytes and a 32-byte verifier. Persist supported parameters/version, salt, and verifier; validate their sizes and work factor before hashing. Off-main derivation, fixed-length digest comparison, best-effort temporary-array clearing, no saved-state PIN, no recovery secret. Volatile five-failure/30-second delay remains.
 
 **Evidence:** PBKDF2 SHA256 is Android-available for the target platforms; the work factor follows OWASP's PBKDF2 guidance. [SecretKeyFactory](https://developer.android.com/reference/javax/crypto/SecretKeyFactory), [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html), [MessageDigest](https://developer.android.com/reference/java/security/MessageDigest)
 

@@ -95,7 +95,17 @@ Use [data-model.md](data-model.md) and [state-machine contract](contracts/state-
 | Expiry while locked | No active call; lock across effective deadline | DULL on next evaluation; no grace/renewal |
 | Clock/race/error | Fake elapsed/wall shifts, expired event races, duplicate writes, invalid timestamps | No unauthorized access; unclear state becomes DULL |
 | Persistence | Serializer fixtures, missing/corrupt/future schema, I/O failure | Safe defaults or explicit unavailable storage; never false save success |
-| Process/reboot/update | Restart owning process, update, or reboot during any grant/pause | New process starts at DULL with no session; valid settings persist; settings file contains no mode/session fields |
+| Process/reboot/update | Restart owning process, update, or reboot during any grant/pause | New process starts at DULL with no session (DEACTIVATED if the parent deactivated); valid settings persist; settings file contains no mode/session fields |
+| Deactivate | In Settings, Deactivate during DULL, Parent Mode, a child session and a call pause; cancel once, then confirm | Cancel changes nothing; confirm ends any grant silently, stops the VPN, dashboard shows Deactivated, phone not dulled |
+| Deactivated persists | While Deactivated: lock/unlock, call, reboot, update | Stays Deactivated; VPN stays off; no DULL moment |
+| Activate | Enter PIN, choose Activate Kids Garden; repeat with VPN consent revoked | DULL with no grant; with revoked consent, SETUP_REQUIRED |
+| Compatibility check | Run setup with another VPN active, in a work profile with VPN blocked, and on a clean phone | Exact reason and remedy for each failure; “This phone can be dulled” on the clean phone; no outbound app traffic during the check |
+| Background stop | Force the OEM battery saver to kill the app, then reopen | Dashboard shows the background-stop message and battery settings button; no exemption requested automatically |
+| Effect cycle | Enable all three effects, default timings, DULL with screen on | Each rises over 2 minutes, rests 1 minute, repeats; touches work; no text appears |
+| Effect interruption | During an effect: start Parent Mode, start a child session, place a phone call, turn the screen off, Deactivate | Effects end promptly; brightness returns to the parent's setting; next DULL starts from zero |
+| Effects without VPN | Turn Network dulling off with one effect on; then try to turn the last method off | DULL holds through the effect and grants are offered; last method cannot be turned off, Deactivate is suggested |
+| Effect access | Deny/revoke overlay or modify-settings access | Only that effect shows not working; others and VPN unaffected |
+| Switch save failure | Fake storage failure on Activate/Deactivate | Previous state stays; calm parent error |
 | VPN lifecycle | Revoke consent, activate other VPN, stop service | DULL authorization plus accurate limited status; no intentional blackhole |
 | Third-party calls | WhatsApp call and a game voice chat during a child session | No pause: countdown, Soft Landing and expiry continue; WhatsApp call quality not slowed |
 | Missing call permission | Deny/revoke permission before and during a pause | No new pause; close affected active pause eligibility and resume remainder; exact parent-only limitation |

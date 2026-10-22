@@ -125,7 +125,7 @@ class CallPauseTest {
     fun callEndAfterRestartRevivesNothing() {
         h.startChild(30)
         h.call(CallSourceState.ACTIVE)
-        h.send(DomainEvent.ProcessStarted)
+        h.send(DomainEvent.ProcessStarted())
         h.call(CallSourceState.INACTIVE)
         assertNull(h.state.childGrant)
         assertEquals(AuthorizationMode.DULL, h.state.mode)

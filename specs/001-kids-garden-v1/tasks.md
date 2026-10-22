@@ -7,7 +7,7 @@ description: "Task list for Kids Garden V1"
 
 **Input**: Design documents from `specs/001-kids-garden-v1/`
 
-**Prerequisites**: plan.md, spec.md (incl. clarifications 2026-10-10), research.md, data-model.md, contracts/, quickstart.md; constitution v2.0.0
+**Prerequisites**: plan.md, spec.md (incl. clarifications 2026-10-10, 2026-10-12, 2026-10-15, 2026-10-18), research.md, data-model.md, contracts/, quickstart.md; constitution v3.1.1
 
 **Tests**: Required. Spec NFR-007 and Constitution IV mandate deterministic tests for every state, transition, boundary, default, corruption case and migration. Tests never write product logs or real user data.
 
@@ -82,7 +82,7 @@ description: "Task list for Kids Garden V1"
 ### PIN security
 
 - [X] T026 [P] Implement `PinHasher` in `app/src/main/java/com/kidsgarden/app/security/PinHasher.kt` with constraints verbatim: `credentialVersion | 1`; `algorithm | Exactly PBKDF2WithHmacSHA256`; `iterations | Exactly 600000 for credential version 1`; `derivedKeyLengthBytes | Exactly 32`; `salt | Base64 decoding to exactly 16 bytes from SecureRandom`; `hash | Base64 decoding to exactly 32 verifier bytes`; off-main derivation, constant-time comparison, best-effort char/byte array clearing
-- [X] T027 Implement `ParentPinManager` per `contracts/parent-pin-manager.md` in `app/src/main/java/com/kidsgarden/app/security/ParentPinManager.kt`: six ASCII digits only, enroll, verify, changePin (current PIN + new + confirm, persists via SettingsRepository before confirming), volatile retry gate (5 consecutive failures → 30 s using elapsed time, reset on success, cleared by process death, never persisted)
+- [X] T027 Implement `ParentPinManager` per `contracts/parent-pin-manager.md` in `app/src/main/java/com/kidsgarden/app/security/ParentPinManager.kt`: one to six ASCII digits (originally six; widened by T095), enroll, verify, changePin (current PIN + new + confirm, persists via SettingsRepository before confirming), volatile retry gate (5 consecutive failures → 30 s using elapsed time, reset on success, cleared by process death, never persisted)
 - [X] T028 [P] Add PIN tests in `app/src/test/java/com/kidsgarden/app/security/PinHasherTest.kt` and `app/src/test/java/com/kidsgarden/app/security/ParentPinManagerTest.kt`: correct/wrong PIN, non-digit and wrong-length rejection, distinct salts for identical PINs, malformed/unsupported credentials, retry delay and reset, raw PIN absent from persisted bytes
 
 ### Navigation and parent gate
@@ -154,7 +154,7 @@ description: "Task list for Kids Garden V1"
 
 **Independent Test**: With fake time, 30-minute grant → 5 minutes play → 25-minute phone call → 25 minutes remain; lock/unlock never pauses; expiry while locked → DULL; WhatsApp call → no pause; after start, Back/recents/notification/deep link all require the PIN.
 
-- [X] T058 [US3] Add child-grant transitions to `domain/src/main/kotlin/com/kidsgarden/app/domain/StateMachine.kt`: StartChildRequested accepts exactly 10, 20 or 30 minutes (10–120 since T098) with a fresh permission, captures intensity and ramp length L, creates a `ChildGrant` in memory, emits ClearParentUiAccess and ApplyNetworkPolicy(Normal) and ScheduleBoundary(next boundary); a new grant replaces the old one without stacking; DeadlineObserved evaluates C from absolute elapsed anchors; C ≥ D → DULL and discard grant; duplicate or stale start commands rejected
+- [X] T058 [US3] Add child-grant transitions to `domain/src/main/kotlin/com/kidsgarden/app/domain/StateMachine.kt`: StartChildRequested accepts 10–120 minutes in 10-minute steps (widened from 10/20/30 by T098) with a fresh permission, captures intensity and ramp length L, creates a `ChildGrant` in memory, emits ClearParentUiAccess and ApplyNetworkPolicy(Normal) and ScheduleBoundary(next boundary); a new grant replaces the old one without stacking; DeadlineObserved evaluates C from absolute elapsed anchors; C ≥ D → DULL and discard grant; duplicate or stale start commands rejected
 - [X] T059 [US3] Add telephony pause rules to `domain/src/main/kotlin/com/kidsgarden/app/domain/StateMachine.kt`: CallAggregateChanged(ACTIVE) on a grant with R > 0 sets pauseStart; repeated ACTIVE adds nothing; INACTIVE/UNAVAILABLE closes once (P += e−pauseStart); zero remaining at call start → DULL, no credit; a grant started while ACTIVE starts paused with full D; the pre-pause boundary stays scheduled as a mandatory fresh-state checkpoint where cached ACTIVE cannot renew and a fresh INACTIVE/UNAVAILABLE/failure closes the pause; stale monitor generations ignored; lock/unlock never alter a pause
 - [X] T060 [US3] Implement `ServiceBoundaryScheduler` (one-shot delay to the next elapsed-realtime boundary inside the VPN service; implements `BoundaryScheduler`) in `app/src/main/java/com/kidsgarden/app/vpn/ServiceBoundaryScheduler.kt`, and make `ForwardingEngine.kt` compare `elapsedRealtime()` to the policy deadline before forwarding under Normal; no exact alarms, WorkManager or wake locks
 - [X] T061 [US3] Implement `TelephonyCallStateMonitor` per `contracts/call-state-monitor.md` in `app/src/main/java/com/kidsgarden/app/calls/TelephonyCallStateMonitor.kt` (implements `CallStateSource`): one `TelephonyCallback.CallStateListener` per active subscription via `createForSubscriptionId`, re-registration on subscription changes, OFFHOOK → ACTIVE, RINGING/IDLE → INACTIVE, aggregate across subscriptions, permission missing/lost → UNAVAILABLE, fresh-state `reconcile()`, monitor generation; never uses `TelecomManager.isInCall`, device-wide `getCallState` or `AudioManager`; keep the pure mapping/aggregation in `app/src/main/java/com/kidsgarden/app/calls/TelephonyStateAggregator.kt`
@@ -230,7 +230,7 @@ description: "Task list for Kids Garden V1"
 - [ ] T089 [P] Record call qualification in `specs/001-kids-garden-v1/evidence/call-qualification.md`: cellular and Wi-Fi calls pause on single and dual SIM; WhatsApp call and a game voice chat do not pause; permission denial/revocation; dialer, default SMS/RCS (RCS photo in DULL) and WhatsApp exclusions; default SMS change at next establish; for each of 10/20/30 minutes on each OS version, at least 10 lock/unlock cycles both with and without a phone call, confirming deadlines move only by call time and the 30/5/25 example leaves exactly 25 minutes (SC-004). Never place live emergency calls
 - [ ] T090 Record performance and battery results (NFR-002 one-second responsiveness, NFR-003 Normal overhead, SC-006 profile differentiation, NFR-004 two-hour idle ≤2 percentage points) in `specs/001-kids-garden-v1/evidence/vpn-qa.md`
 - [ ] T091 [P] Run the SC-001 parent setup study and SC-006 adult blind comparison with adult participants and synthetic sessions; record results in `specs/001-kids-garden-v1/evidence/usability.md`
-- [ ] T092 Run all suites and the quickstart scenario table (`.\gradlew.bat :domain:test :app:testDebugUnitTest :app:lintDebug :app:connectedDebugAndroidTest`) and record results in `specs/001-kids-garden-v1/evidence/qa-results.md` (G-QUALITY)
+- [ ] T092 Run all suites and the quickstart scenario table (`.\gradlew.bat :domain:test :app:testDebugUnitTest :app:lintDebug :app:connectedDebugAndroidTest`) and record results in `specs/001-kids-garden-v1/evidence/qa-results.md` (G-QUALITY) — automated suites pass on API 36 (2026-10-12); API 35 and scenario table remain
 - [X] T093 Update `specs/001-kids-garden-v1/plan.md` gate register and `specs/001-kids-garden-v1/research.md` with recorded evidence; report unmet items honestly
 - [ ] T094 Add private APK signing and sideload instructions to `specs/001-kids-garden-v1/quickstart.md` only after all gates pass; keep keys outside the repository
 
@@ -240,6 +240,53 @@ description: "Task list for Kids Garden V1"
 - [X] T096 Remove the Parent Mode window: after PARENT_MODE commits, move the app to the background (`KidsGardenNavHost.kt`); delete `ParentModeScreen.kt`; show “Exit Parent Mode” and the ends-on-lock text on `ParentActionScreen` while PARENT_MODE is active (FR-007, FR-008)
 - [X] T097 Open the parent interface without a PIN during PARENT_MODE: `UiOpened` issues ParentAccess with a fresh one-use permission when PARENT_MODE is active and the phone is unlocked (`StateMachine.kt`); the PIN route redirects to parent actions; tests in `ParentModeTest.kt` (FR-004)
 - [X] T098 Child durations 10–120 minutes in 10-minute steps with up/down arrows and a Start button (`StateMachine.CHILD_DURATIONS_MINUTES`, `ChildDurationScreen.kt`); tests in `ChildSessionTest.kt` and `ChildSessionFlowTest.kt` (FR-010, FR-012)
+
+## Phase 10: Active/Deactivated switch (FR-031, added 2026-10-15)
+
+**Goal**: The parent can switch Kids Garden off and on in Settings. Deactivated ends every grant, stops the VPN and never enters DULL until the parent activates again; the choice survives restart and reboot. Plan Phase 14.
+
+**Independent Test**: Deactivate from each mode, reboot, confirm the phone is not dulled; activate with the PIN and confirm DULL returns with no grant.
+
+- [X] T099 Add `DEACTIVATED` to `domain/src/main/kotlin/com/kidsgarden/app/domain/Mode.kt` and the `ActivateRequested`, `DeactivateRequested(confirmed)` events and `ProcessStarted(savedActive)` to `DomainEvent.kt`; add `StartVpn`/`StopVpn` effects
+- [X] T100 Implement the switch in `StateMachine.kt`: Deactivate (valid ParentAccess + confirmed) from every non-DEACTIVATED state clears grant/pause/permissions after a successful write; Activate (fresh PIN permission) moves to DULL; every other event is ignored while DEACTIVATED (contracts/state-machine.md)
+- [X] T101 [P] Add `domain/src/test/kotlin/com/kidsgarden/app/domain/ActivationTest.kt`: deactivate from DULL, PARENT_MODE, CHILD_PLAY_SESSION, SOFT_LANDING and during a call pause; all ignored events; activate to DULL and to SETUP_REQUIRED; failed writes leave state unchanged; process start with `savedActive = false`
+- [X] T102 Add `active: Boolean = true`, `screenEffects`, `brightnessRestore` and `schemaVersion = 2` to `app/src/main/java/com/kidsgarden/app/data/SettingsDocument.kt`; v1 → v2 migration in `SettingsMigrations.kt`; validation in `SettingsDocumentSerializer.kt` (missing `active` in v2 is corrupt); `updateActive` in `SettingsRepository.kt`
+- [X] T103 [P] Extend settings tests in `app/src/test/java/com/kidsgarden/app/data/`: v1 fixture migrates with `active = true`, defaults and corruption produce `active = true`, `updateActive` round trip and failed write
+- [X] T104 Add `deactivate` and `activate` to `SessionManager.kt` and start the process at DEACTIVATED from valid saved settings; wire through `AppContainer.kt`
+- [X] T105 Stop the VPN and foreground service on `StopVpn` and skip starting it while Deactivated in `app/src/main/java/com/kidsgarden/app/vpn/VpnDullingController.kt` and `KidsGardenVpnService.kt`; skip VPN recovery in `receivers/BootReceiver.kt` and `DeviceEventCoordinator.kt` when saved `active = false`
+- [X] T106 Add the Active/Deactivated switch with one confirmation dialog to `app/src/main/java/com/kidsgarden/app/ui/settings/SettingsScreen.kt`; show Active/Deactivated on `ui/dashboard/DashboardScreen.kt`; show only “Activate Kids Garden” and Settings on `ui/dashboard/ParentActionScreen.kt` while Deactivated; route Activate through fresh PIN in `ui/navigation/KidsGardenNavHost.kt`; all copy in `res/values/strings.xml`
+- [X] T107 [P] Add `app/src/androidTest/java/com/kidsgarden/app/ui/ActivationFlowTest.kt`: confirm/cancel Deactivate, failed save, actions screen while Deactivated, Activate requires PIN, accessibility labels on the switch — written and compiled 2026-10-19; not yet run on a device
+- [ ] T108 Record device check in `specs/001-kids-garden-v1/evidence/qa-results.md` on API 35/36: Deactivate stops the VPN and its notification, stays off across lock/unlock, call and reboot; Activate restores DULL; revoked consent gives SETUP_REQUIRED
+- [ ] T109 Re-run the privacy storage check (T085) so the settings file allowlist includes `active` and still contains no mode/session data — allowlist and Deactivate/Activate writes added to `StoragePrivacyTest` 2026-10-19; device run pending
+
+## Phase 11: Compatibility check, battery guidance, screen and sound dulling (FR-032–036, added 2026-10-18)
+
+**Goal**: A parent learns at setup whether the phone can be dulled; Kids Garden explains background stops; and Dull Mode can also use a gradual grey screen, lower media volume and lower brightness, each switchable, with or without the VPN. Plan Phase 15.
+
+**Independent Test**: On a phone with another VPN active, setup reports the reason and offers effects; with effects on and default timings, DULL fades them in over two minutes, rests one minute, and they stop at once on Parent Mode, a call or screen off.
+
+- [X] T110 Add `Effect`, `EffectPolicy`, `EffectTargets` and `EffectCycle` to `domain/src/main/kotlin/com/kidsgarden/app/domain/` (contracts/screen-effects.md)
+- [X] T111 [P] Add `domain/src/test/kotlin/com/kidsgarden/app/domain/EffectCycleTest.kt`: rise over build-up, ~10 s ease, break, break 0 holds, repeat, restart from zero
+- [X] T112 Emit `ApplyEffectPolicy` from `StateMachine.kt`: On only in DULL + Active + no ACTIVE call; Off on grant, call, Deactivate; capability = VPN running OR any working effect; add ScreenOn, EffectCapabilityChanged and MethodSwitchesChanged events
+- [X] T113 [P] Add `domain/src/test/kotlin/com/kidsgarden/app/domain/EffectPolicyTest.kt`: every mode and call combination; SETUP_REQUIRED only with no working method; grants offered when only an effect works
+- [X] T114 Extend `SettingsRepository.kt` with `updateMethodSwitches` (reject all off), `updateEffectTiming` and `saveBrightnessRestore`; validation in `SettingsDocumentSerializer.kt`; tests in `app/src/test/java/com/kidsgarden/app/data/`
+- [X] T115 Create `app/src/main/java/com/kidsgarden/app/effects/ScreenEffectsController.kt` with `GreyOverlay.kt`, `MediaVolumeCap.kt`, `BrightnessDimmer.kt` and `EffectCapabilityProvider.kt`; wire in `AppContainer.kt`; restore leftover brightness at start; in each break lift the volume cap without raising volume and ease brightness back to the saved level (FR-035)
+- [X] T116 Add `SYSTEM_ALERT_WINDOW` and `WRITE_SETTINGS` to `app/src/main/AndroidManifest.xml` and explanation screens `ui/setup/OverlayPermissionScreen.kt` and `ui/setup/ModifySettingsPermissionScreen.kt`, shown only when the parent enables that effect
+- [X] T117 Add `checkCompatibility()` to `vpn/VpnDullingController.kt` (consent, device policy, other VPN, FGS eligibility, local forwarding self-test with no remote destination) and show the result in `ui/setup/VpnSetupScreen.kt`; setup completes on Pass or a working effect
+- [X] T118 [P] Add `app/src/test/java/com/kidsgarden/app/vpn/CompatibilityCheckTest.kt`: each outcome with fakes; the check opens no outbound socket
+- [X] T119 Derive `BackgroundStopped` in `SessionManager.kt`/`ProtectionStatus` at process start and service loss; dashboard message and “Show battery settings” button opening `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` in `ui/dashboard/DashboardScreen.kt`
+- [X] T120 Add the four method switches, build-up/break pickers, “Check this phone” and last-method guard to `ui/settings/SettingsScreen.kt`; per-method status on the dashboard, plus a “Check this phone” button on the dashboard when the phone shows as unprotected (SETUP_REQUIRED, FR-032); all copy in `res/values/strings.xml`
+- [X] T121 [P] Add instrumented tests `app/src/androidTest/java/com/kidsgarden/app/effects/ScreenEffectsTest.kt`: touches pass through the overlay, alpha ≤ 0.8, no overlay during a call, volume cap re-applied with other streams untouched, brightness restored on Off and after process death, missing access disables only that effect — written and compiled 2026-10-19; not yet run on a device
+- [X] T122 [P] Add `app/src/androidTest/java/com/kidsgarden/app/ui/MethodSettingsFlowTest.kt`: switches, last-method guard, access explanations, compatibility result screens, battery guidance button — written and compiled 2026-10-19; not yet run on a device
+- [ ] T123 Record device checks in `specs/001-kids-garden-v1/evidence/qa-results.md` on API 35/36: compatibility failure reasons (second VPN, work profile), OEM background stop, effect cycle timings, screen-off idle battery unchanged (evidence for SC-010, including break timing ±5 s and screen-off battery)
+- [ ] T124 Re-run the privacy storage check (T085): settings allowlist includes `screenEffects` and `brightnessRestore`, still no mode/session/content data — allowlist and effect writes added to `StoragePrivacyTest` 2026-10-19; device run pending
+
+### Owner changes 2026-10-19 and 2026-10-21
+
+- [X] T125 Active/Deactivated switch at the top of Parent options; no pop-up and no second PIN in either direction; red "off" card and PIN-screen banner while Deactivated (FR-031)
+- [X] T126 After "Start play time" the brief confirmation shows, then the app moves to the background (FR-010)
+- [X] T127 Parent options names a missing effect access ("Grey screen needs Display over other apps") and opens it, instead of the VPN setup message
+- [X] T128 PIN credential v2: 180000 PBKDF2 rounds (70% fewer than v1); v1 credentials verified and re-hashed as v2 on the next correct PIN; tests in `PinHasherTest.kt` and `ParentPinManagerTest.kt` (FR-005)
 
 ---
 
@@ -256,6 +303,8 @@ description: "Task list for Kids Garden V1"
 - **US5 (Phase 7)**: depends on Foundational; dashboard remaining-time display needs US3 (T058).
 - **US6 (Phase 8)**: exclusions depend on US1's VPN service (T044); recovery tests cover all prior transitions.
 - **Polish (Phase 9)**: depends on all stories.
+- **Compatibility and screen/sound dulling (Phase 11)**: depends on Phase 10's settings v2 (T102) and reducer (T100). T110 → T112 in order; T114 before T115; T117 needs the VPN controller (T043–T046).
+- **Active/Deactivated switch (Phase 10)**: depends on Phases 2–8 (reducer, settings, VPN controller, Settings/Dashboard screens). T099 → T100 → T104 in order; T102 before T104; T108 needs T105–T106.
 
 ### Key task dependencies
 

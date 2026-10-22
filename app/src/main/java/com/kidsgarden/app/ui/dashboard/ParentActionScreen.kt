@@ -21,6 +21,9 @@ import com.kidsgarden.app.ui.setup.SetupScaffold
  *
  * [onExitParentMode] is non-null while Parent Mode is on (T055): the screen then offers
  * "Exit Parent Mode" (no PIN needed) in place of "Use phone as parent".
+ *
+ * [onActiveChange] puts the Active/Deactivated switch at the top (FR-031). While
+ * Deactivated ([active] false) grants are not offered; only the switch and Settings remain.
  */
 @Composable
 fun ParentActionScreen(
@@ -31,22 +34,30 @@ fun ParentActionScreen(
     onVpnSetup: () -> Unit,
     onStatus: (() -> Unit)? = null,
     onExitParentMode: (() -> Unit)? = null,
+    active: Boolean = true,
+    onActiveChange: ((Boolean) -> Unit)? = null,
+    switchFailed: Boolean = false,
+    /** Why grants are unavailable, and the button that fixes it (VPN setup by default). */
+    limitedText: Int = R.string.vpn_limited,
+    fixLabel: Int = R.string.action_vpn_setup,
 ) {
     SetupScaffold(
         title = stringResource(R.string.actions_title),
         actions = {
-            if (onExitParentMode != null) {
-                OutlinedButton(onClick = onExitParentMode, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.parent_mode_exit))
+            if (active) {
+                if (onExitParentMode != null) {
+                    OutlinedButton(onClick = onExitParentMode, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.parent_mode_exit))
+                    }
+                } else {
+                    Button(onClick = onUseAsParent, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_use_as_parent))
+                    }
                 }
-            } else {
-                Button(onClick = onUseAsParent, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_use_as_parent))
-                }
-            }
-            if (onGiveToChild != null) {
-                Button(onClick = onGiveToChild, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_give_to_child))
+                if (onGiveToChild != null) {
+                    Button(onClick = onGiveToChild, enabled = protectionReady, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.action_give_to_child))
+                    }
                 }
             }
             if (onSettings != null) {
@@ -54,26 +65,29 @@ fun ParentActionScreen(
                     Text(stringResource(R.string.action_settings))
                 }
             }
-            if (onStatus != null) {
+            if (active && onStatus != null) {
                 OutlinedButton(onClick = onStatus, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.action_status))
                 }
             }
-            if (!protectionReady) {
+            if (active && !protectionReady) {
                 OutlinedButton(onClick = onVpnSetup, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.action_vpn_setup))
+                    Text(stringResource(fixLabel))
                 }
             }
         },
     ) {
-        BodyText(
-            stringResource(
-                when {
-                    onExitParentMode != null -> R.string.parent_mode_confirmation
-                    protectionReady -> R.string.vpn_status_running
-                    else -> R.string.vpn_limited
-                },
-            ),
-        )
+        if (onActiveChange != null) ActiveSwitchCard(active = active, onActiveChange = onActiveChange, failed = switchFailed)
+        if (active) {
+            BodyText(
+                stringResource(
+                    when {
+                        onExitParentMode != null -> R.string.parent_mode_confirmation
+                        protectionReady -> R.string.vpn_status_running
+                        else -> limitedText
+                    },
+                ),
+            )
+        }
     }
 }

@@ -16,6 +16,8 @@ import java.io.OutputStream
  *
  * - Max serialized size: 64 KiB.
  * - `schemaVersion` is read before full decoding; unsupported versions are corruption.
+ *   Version 1 is decoded with v2 defaults and then migrated by [SettingsMigrations]; a v1
+ *   document carrying v2 keys, or a v2 document missing any of them, is corruption.
  * - Unknown keys are corruption, except the legacy keys `mode` and `childSession`, which
  *   are ignored here and therefore dropped on the next write (FR-026).
  * - Any validation failure makes the whole document corrupt; DataStore's corruption
@@ -27,6 +29,9 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
 
     const val MAX_SERIALIZED_BYTES = 64 * 1024
     private val LEGACY_KEYS = setOf("mode", "childSession")
+
+    /** Keys introduced by schema v2; required in v2, absent in v1. */
+    private val V2_KEYS = setOf("active", "screenEffects", "brightnessRestore")
 
     private val json = Json {
         ignoreUnknownKeys = false
@@ -52,9 +57,12 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
             val root = json.parseToJsonElement(text).jsonObject
             val version = root["schemaVersion"]?.jsonPrimitive?.int
                 ?: throw CorruptionException("missing schemaVersion")
-            if (version != SettingsDocument.CURRENT_SCHEMA_VERSION) {
+            if (version !in SettingsDocument.SUPPORTED_SCHEMA_VERSIONS) {
                 throw CorruptionException("unsupported schemaVersion")
             }
+            val v2KeysPresent = V2_KEYS.count { it in root }
+            val expected = if (version == SettingsDocument.CURRENT_SCHEMA_VERSION) V2_KEYS.size else 0
+            if (v2KeysPresent != expected) throw CorruptionException("fields do not match schemaVersion")
             val withoutLegacy = JsonObject(root.filterKeys { it !in LEGACY_KEYS })
             val document = json.decodeFromJsonElement(SettingsDocument.serializer(), withoutLegacy)
             document.validate()
@@ -73,6 +81,7 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
     /** Visible for tests. Validates before writing so an invalid document is never stored. */
     fun encode(document: SettingsDocument): String {
         document.validate()
+        check(document.schemaVersion == SettingsDocument.CURRENT_SCHEMA_VERSION) { "only the current schema is written" }
         val text = json.encodeToString(SettingsDocument.serializer(), document)
         check(text.toByteArray(Charsets.UTF_8).size <= MAX_SERIALIZED_BYTES) { "settings document too large" }
         return text
