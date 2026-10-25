@@ -47,6 +47,7 @@ fun DashboardScreen(
         state.remainingPlayMillis?.let { remaining ->
             BodyText(
                 if (state.playPaused) stringResource(R.string.dashboard_paused)
+                else if (state.unlockGrace) stringResource(R.string.grace_remaining, formatMinutesSeconds(remaining))
                 else stringResource(R.string.dashboard_remaining, formatMinutesSeconds(remaining)),
             )
         }

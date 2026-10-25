@@ -298,6 +298,9 @@ description: "Task list for Kids Garden V1"
 - [X] T132 Settings schema v3: `unlockGrace` and `lastUnlockGraceEpochMillis`, v1/v2 → v3 migration, per-version key checks, `updateUnlockGrace` and `saveUnlockGraceStart`; tests in `app/src/test/java/com/kidsgarden/app/data/`
 - [X] T133 Unlock grace section in `SettingsScreen.kt`; grace shown on the dashboard; wiring in `AppContainer.kt` and `KidsGardenNavHost.kt`; strings
 - [ ] T134 Device check on API 35/36: grace starts on unlock, fades, rest keeps the phone dull, reboot within rest gives no new grace
+- [X] T135 Fix: register the USER_PRESENT receiver as exported so unlocks reach Kids Garden on phones where System UI sends it (Samsung); it is a protected broadcast, so it cannot be faked
+- [X] T136 Show a running unlock grace with a countdown on Parent options and the Status page (parent-only)
+- [X] T137 Owner UI changes 2026-10-25: every time setting uses up/down arrows (`TimeStepper.kt`); the app opens as a card over the dimmed home screen instead of full screen (`MainActivity.kt`, `themes.xml`)
 
 ---
 

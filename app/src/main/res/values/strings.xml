@@ -126,8 +126,6 @@
     <string name="settings_title">Settings</string>
     <string name="settings_intensity_heading">Dull level</string>
     <string name="settings_ramp_heading">Soft Landing</string>
-    <string name="ramp_one_minute">1 minute</string>
-    <string name="ramp_two_minutes">2 minutes</string>
     <string name="settings_vpn_android_note">Android’s own VPN settings can still turn the VPN off. The Kids Garden PIN does not protect them.</string>
     <string name="settings_change_pin">Change PIN</string>
     <string name="settings_limitations">Limitations</string>
@@ -213,12 +211,17 @@
     <string name="access_granted">Access is on.</string>
 
     <!-- Unlock grace (FR-037); parent-facing only, never shown to the child -->
+    <!-- Up/down time controls (owner change 2026-10-25) -->
+    <string name="stepper_decrease">Shorter %1$s</string>
+    <string name="stepper_increase">Longer %1$s</string>
+
     <string name="unlock_grace_heading">Unlock grace</string>
     <string name="unlock_grace_switch">Free minutes after unlock</string>
     <string name="unlock_grace_body">When the phone is unlocked without your PIN, it works normally for a short time, then slowly becomes dull. Unlocking again during the rest time keeps it dull.</string>
     <string name="unlock_grace_time">Grace time</string>
     <string name="unlock_grace_fade">Fade to dull</string>
     <string name="unlock_grace_rest">Rest time</string>
+    <string name="grace_remaining">Unlock grace is on: %1$s left before the phone becomes dull.</string>
     <string name="mode_unlock_grace">Unlock grace is on. The phone will slowly become dull.</string>
     <plurals name="hours">
         <item quantity="one">%1$d hour</item>

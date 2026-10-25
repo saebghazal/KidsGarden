@@ -47,7 +47,10 @@ class DeviceEventCoordinator(
             },
             Context.RECEIVER_NOT_EXPORTED,
         )
-        appContext.registerReceiver(presentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), Context.RECEIVER_NOT_EXPORTED)
+        // USER_PRESENT is sent by System UI on some phones (Samsung), not by the system
+        // process, so a not-exported receiver never gets it. It is a protected broadcast:
+        // ordinary apps cannot send it, so exporting this receiver lets no one fake an unlock.
+        appContext.registerReceiver(presentReceiver, IntentFilter(Intent.ACTION_USER_PRESENT), Context.RECEIVER_EXPORTED)
         registered = true
         sample()
     }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -288,7 +289,18 @@ fun KidsGardenNavHost(
 
         guardedComposable(Routes.ACTIONS, accessActive, denied) {
             var switchFailed by remember { mutableStateOf(false) }
+            // Display-only countdown for a running unlock grace; it never changes state.
+            val graceRemaining by produceState<Long?>(null, snapshot) {
+                while (true) {
+                    value = snapshot.remainingPlayMillis?.takeIf { snapshot.unlockGraceActive }?.let { atSnapshot ->
+                        if (snapshot.playPaused) atSnapshot
+                        else (atSnapshot - (container.time.elapsedRealtimeMillis() - snapshot.snapshotElapsedMillis)).coerceAtLeast(0L)
+                    }
+                    delay(1_000L)
+                }
+            }
             ParentActionScreen(
+                graceRemainingMillis = graceRemaining,
                 // The Active/Deactivated switch at the top (FR-031). The PIN was entered to reach
                 // this screen, so switching needs no second PIN; Deactivate still confirms once.
                 active = snapshot.active,

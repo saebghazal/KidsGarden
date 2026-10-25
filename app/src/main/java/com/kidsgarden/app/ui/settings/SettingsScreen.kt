@@ -127,12 +127,9 @@ fun SettingsScreen(
             onSelect = onIntensity,
         )
 
-        Heading(stringResource(R.string.settings_ramp_heading))
-        RadioGroup(
-            options = listOf(60 to stringResource(R.string.ramp_one_minute), 120 to stringResource(R.string.ramp_two_minutes)),
-            selected = state.softLandingSeconds,
-            onSelect = onSoftLanding,
-        )
+        val rampName = stringResource(R.string.settings_ramp_heading)
+        Heading(rampName)
+        TimeStepper(rampName, listOf(60, 120), state.softLandingSeconds, onSoftLanding) { minutesLabel(it) }
 
         Heading(stringResource(R.string.methods_heading))
         // Network dulling = the VPN. Off ends grants and stops it; on goes through VPN setup.
@@ -173,20 +170,14 @@ fun SettingsScreen(
         }
         BodyText(stringResource(R.string.settings_vpn_android_note))
 
-        Heading(stringResource(R.string.effect_build_up_heading))
-        RadioGroup(
-            options = EffectCycle.BUILD_UP_SECONDS.map { it to pluralStringResource(R.plurals.effect_minutes, it / 60, it / 60) },
-            selected = state.buildUpSeconds,
-            onSelect = onBuildUp,
-        )
-        Heading(stringResource(R.string.effect_break_heading))
-        RadioGroup(
-            options = EffectCycle.BREAK_SECONDS.map {
-                it to if (it == 0) stringResource(R.string.effect_break_none) else pluralStringResource(R.plurals.effect_minutes, it / 60, it / 60)
-            },
-            selected = state.breakSeconds,
-            onSelect = onBreak,
-        )
+        val buildUpName = stringResource(R.string.effect_build_up_heading)
+        Heading(buildUpName)
+        TimeStepper(buildUpName, EffectCycle.BUILD_UP_SECONDS, state.buildUpSeconds, onBuildUp) { minutesLabel(it) }
+        val breakName = stringResource(R.string.effect_break_heading)
+        Heading(breakName)
+        TimeStepper(breakName, EffectCycle.BREAK_SECONDS, state.breakSeconds, onBreak) {
+            if (it == 0) stringResource(R.string.effect_break_none) else minutesLabel(it)
+        }
 
         if (state.callPausePermissionMissing) {
             BodyText(stringResource(R.string.call_limitation))
@@ -246,24 +237,15 @@ private fun UnlockGraceSection(grace: UnlockGraceSettings, onChange: (UnlockGrac
     )
     BodyText(stringResource(R.string.unlock_grace_body))
     if (!grace.enabled) return
-    Text(stringResource(R.string.unlock_grace_time), style = MaterialTheme.typography.titleSmall)
-    RadioGroup(
-        options = UnlockGrace.GRACE_SECONDS.map { it to minutesLabel(it) },
-        selected = grace.graceSeconds,
-        onSelect = { onChange(grace.copy(graceSeconds = it)) },
-    )
-    Text(stringResource(R.string.unlock_grace_fade), style = MaterialTheme.typography.titleSmall)
-    RadioGroup(
-        options = UnlockGrace.FADE_SECONDS.map { it to minutesLabel(it) },
-        selected = grace.fadeSeconds,
-        onSelect = { onChange(grace.copy(fadeSeconds = it)) },
-    )
-    Text(stringResource(R.string.unlock_grace_rest), style = MaterialTheme.typography.titleSmall)
-    RadioGroup(
-        options = UnlockGrace.REST_SECONDS.map { it to durationLabel(it) },
-        selected = grace.restSeconds,
-        onSelect = { onChange(grace.copy(restSeconds = it)) },
-    )
+    val graceName = stringResource(R.string.unlock_grace_time)
+    Text(graceName, style = MaterialTheme.typography.titleSmall)
+    TimeStepper(graceName, UnlockGrace.GRACE_SECONDS, grace.graceSeconds, { onChange(grace.copy(graceSeconds = it)) }) { minutesLabel(it) }
+    val fadeName = stringResource(R.string.unlock_grace_fade)
+    Text(fadeName, style = MaterialTheme.typography.titleSmall)
+    TimeStepper(fadeName, UnlockGrace.FADE_SECONDS, grace.fadeSeconds, { onChange(grace.copy(fadeSeconds = it)) }) { minutesLabel(it) }
+    val restName = stringResource(R.string.unlock_grace_rest)
+    Text(restName, style = MaterialTheme.typography.titleSmall)
+    TimeStepper(restName, UnlockGrace.REST_SECONDS, grace.restSeconds, { onChange(grace.copy(restSeconds = it)) }) { durationLabel(it) }
 }
 
 @Composable

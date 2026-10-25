@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        The app opens as a card over the dimmed home screen rather than full screen
+        (owner change 2026-10-25). The window is see-through; Compose draws the scrim and card.
+    -->
+    <style name="Theme.KidsGarden.Card" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

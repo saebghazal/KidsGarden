@@ -3,6 +3,7 @@ package com.kidsgarden.app.ui
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -96,13 +97,15 @@ class MethodSettingsFlowTest {
         setSettings(settings(), onBuildUp = { buildUp = it }, onBreak = { pause = it }, onCheck = { checks++ })
 
         compose.onNodeWithText(text(R.string.compat_check)).performScrollTo().performClick()
-        compose.onNodeWithText(text(R.string.effect_break_none)).performScrollTo().performClick()
-        compose.onAllNodesWithText(context.resources.getQuantityString(R.plurals.effect_minutes, 5, 5))[0]
+        // Up/down arrows: break 1 min → no break; build-up 2 min → 3 min.
+        compose.onNodeWithContentDescription(context.getString(R.string.stepper_decrease, text(R.string.effect_break_heading)))
+            .performScrollTo().performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.stepper_increase, text(R.string.effect_build_up_heading)))
             .performScrollTo().performClick()
 
         assertEquals(1, checks)
         assertEquals(0, pause)
-        assertEquals(300, buildUp)
+        assertEquals(180, buildUp)
     }
 
     @Test

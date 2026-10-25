@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -135,7 +136,8 @@ class DashboardSettingsTest {
             )
         }
         compose.onNodeWithText(text(R.string.intensity_strong)).performScrollTo().performClick()
-        compose.onNodeWithText(text(R.string.ramp_one_minute)).performScrollTo().performClick()
+        compose.onNodeWithContentDescription(context.getString(R.string.stepper_decrease, text(R.string.settings_ramp_heading)))
+            .performScrollTo().performClick()
         // Network dulling off stops the VPN (another method is still on).
         compose.onNodeWithText(text(R.string.method_network)).performScrollTo().performClick()
         assertEquals(DullIntensity.STRONG, intensity)
