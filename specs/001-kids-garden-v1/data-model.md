@@ -13,7 +13,7 @@ Two independent concepts:
 
 Only a detectable active mobile/Telecom call pauses child/ramp accounting. Fixed communication-app VPN exclusions are independent of detection and never pause play time. DULL remains active on non-excluded traffic; missing call detection continues countdown without a global bypass.
 
-## Persisted SettingsDocument v2
+## Persisted SettingsDocument v3
 
 Stored as UTF-8 JSON at an app-private no-backup location, initially `kidsgarden-settings.json`. Max serialized size: 64 KiB. No directory of historical versions, settings exports, backup files, logs, or traffic files. DataStore's internal atomic-write mechanics do not authorize product history.
 
@@ -25,6 +25,8 @@ Stored as UTF-8 JSON at an app-private no-backup location, initially `kidsgarden
 | dullIntensity | Enum / MEDIUM | GENTLE, MEDIUM, STRONG |
 | vpnDullingEnabled | Boolean / false | The Network dulling switch (“Network dulling” = VPN dulling) (set true when setup completes with a passing check); parent preference, not live consent or running-service proof |
 | screenEffects | ScreenEffects | Grey screen, lower media volume, lower brightness switches and cycle timings (FR-034–036) |
+| unlockGrace | UnlockGraceSettings | Unlock grace switch and times (FR-037) |
+| lastUnlockGraceEpochMillis | Long? / null | Start of the last unlock grace (epoch); one overwritten value so a restart cannot reset the rest time; never a history |
 | brightnessRestore | BrightnessRestore? / null | The parent's brightness level and auto setting saved before the brightness effect first lowers it; cleared after restore |
 | vpnDullingConfiguration | ProfileConfiguration | Canonical profile map, no redundant top-level cap values |
 | softLandingDurationSeconds | Int / 120 | Exactly 60 or 120 |
@@ -65,6 +67,17 @@ NORMAL is a domain policy with no cap and zero artificial delay, not bandwidthKb
 
 At least one of `vpnDullingEnabled` and the three effect switches must be true once setup is complete; a document violating this is invalid for that field set and the write is rejected. Maximum strengths are fixed per intensity in code (tint 0.40/0.60/0.75 alpha; media cap 50/30/15% of max; brightness 60/40/20% of the saved level), not stored.
 
+### UnlockGraceSettings
+
+| Field | Type / default | Validation |
+| --- | --- | --- |
+| enabled | Boolean / true | Owner default on (2026-10-25) |
+| graceSeconds | Int / 300 | 60, 120, 180, 300, 600 or 900 |
+| fadeSeconds | Int / 120 | 60, 120, 180, 240 or 300 |
+| restSeconds | Int / 3600 | 900, 1800, 3600, 7200, 10800 or 14400 |
+
+v2 → v3 migration adds `unlockGrace` with these defaults and `lastUnlockGraceEpochMillis = null`, and sets `schemaVersion = 3`. A v3 document missing either key, or an older one carrying them, is corruption.
+
 ### BrightnessRestore
 
 | Field | Type | Validation |
@@ -95,6 +108,8 @@ Written once per DULL period before the first brightness change and cleared afte
     "breakSeconds": 60
   },
   "brightnessRestore": null,
+  "unlockGrace": { "enabled": true, "graceSeconds": 300, "fadeSeconds": 120, "restSeconds": 3600 },
+  "lastUnlockGraceEpochMillis": null,
   "vpnDullingConfiguration": {
     "GENTLE": { "bandwidthKbps": 256, "addedRttLatencyMs": 300 },
     "MEDIUM": { "bandwidthKbps": 128, "addedRttLatencyMs": 600 },

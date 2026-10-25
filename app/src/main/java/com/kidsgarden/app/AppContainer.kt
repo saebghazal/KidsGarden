@@ -133,6 +133,7 @@ class AppContainer(context: Context) {
             }
         },
         effectSink = screenEffects,
+        unlockGraceStore = { epoch -> settingsRepository.saveUnlockGraceStart(epoch) },
     )
 
     /** Screen-off, unlock, and sampled lock state, reported as domain events (T056). */

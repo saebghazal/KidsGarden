@@ -68,6 +68,8 @@ class StoragePrivacyTest {
         // Schema v2 (FR-031, FR-034–036): parent choices and the parent's own brightness only.
         "active", "screenEffects", "greyScreenEnabled", "lowerVolumeEnabled", "lowerBrightnessEnabled",
         "buildUpSeconds", "breakSeconds", "brightnessRestore", "level", "automatic",
+        // Schema v3 (FR-037): grace settings and the start time of the last grace only.
+        "unlockGrace", "enabled", "graceSeconds", "fadeSeconds", "restSeconds", "lastUnlockGraceEpochMillis",
     )
 
     private fun keys(element: JsonElement): Set<String> = when (element) {

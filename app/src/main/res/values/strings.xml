@@ -211,4 +211,17 @@
     <string name="settings_write_body">Lower brightness slowly dims the screen while the phone is in Dull Mode and puts your brightness back when it stops. Android will open “Modify system settings”; turn it on for Kids Garden, then come back.</string>
     <string name="settings_write_open">Open Modify system settings</string>
     <string name="access_granted">Access is on.</string>
+
+    <!-- Unlock grace (FR-037); parent-facing only, never shown to the child -->
+    <string name="unlock_grace_heading">Unlock grace</string>
+    <string name="unlock_grace_switch">Free minutes after unlock</string>
+    <string name="unlock_grace_body">When the phone is unlocked without your PIN, it works normally for a short time, then slowly becomes dull. Unlocking again during the rest time keeps it dull.</string>
+    <string name="unlock_grace_time">Grace time</string>
+    <string name="unlock_grace_fade">Fade to dull</string>
+    <string name="unlock_grace_rest">Rest time</string>
+    <string name="mode_unlock_grace">Unlock grace is on. The phone will slowly become dull.</string>
+    <plurals name="hours">
+        <item quantity="one">%1$d hour</item>
+        <item quantity="other">%1$d hours</item>
+    </plurals>
 </resources>

@@ -12,29 +12,34 @@ import androidx.datastore.core.DataMigration
 object SettingsMigrations {
 
     /**
-     * v1 → v2 (FR-031, FR-034–036): Active, default screen effects (all off, default
-     * timings) and no saved brightness. The serializer already decoded v1 with those
-     * defaults; this only stamps the version so the next write is v2.
+     * v1 → v3 and v2 → v3. The serializer already decoded the older document with current
+     * defaults for every newer field; this resets those fields explicitly and stamps the
+     * version so the next write is current.
+     *
+     * - v1 → v2 (FR-031, FR-034–036): Active, default screen effects, no saved brightness.
+     * - v2 → v3 (FR-037): unlock grace with its defaults (on, 5 min, 2 min fade, 60 min
+     *   rest) and no previous grace.
      */
-    val V1_TO_V2: DataMigration<SettingsDocument> = object : DataMigration<SettingsDocument> {
+    val TO_CURRENT: DataMigration<SettingsDocument> = object : DataMigration<SettingsDocument> {
         override suspend fun shouldMigrate(currentData: SettingsDocument): Boolean =
-            currentData.schemaVersion == SettingsDocument.LEGACY_SCHEMA_VERSION
+            currentData.schemaVersion < SettingsDocument.CURRENT_SCHEMA_VERSION
 
-        override suspend fun migrate(currentData: SettingsDocument): SettingsDocument = migrateV1(currentData)
+        override suspend fun migrate(currentData: SettingsDocument): SettingsDocument = SettingsMigrations.migrate(currentData)
 
         override suspend fun cleanUp() = Unit
     }
 
-    /** Pure form of [V1_TO_V2], for tests. Idempotent: a v2 document is returned unchanged. */
-    fun migrateV1(document: SettingsDocument): SettingsDocument {
-        if (document.schemaVersion != SettingsDocument.LEGACY_SCHEMA_VERSION) return document
-        return document.copy(
-            schemaVersion = SettingsDocument.CURRENT_SCHEMA_VERSION,
-            active = true,
-            screenEffects = ScreenEffects(),
-            brightnessRestore = null,
-        )
+    /** Pure form of [TO_CURRENT], for tests. Idempotent: a current document is returned unchanged. */
+    fun migrate(document: SettingsDocument): SettingsDocument {
+        var doc = document
+        if (doc.schemaVersion == 1) {
+            doc = doc.copy(schemaVersion = 2, active = true, screenEffects = ScreenEffects(), brightnessRestore = null)
+        }
+        if (doc.schemaVersion == 2) {
+            doc = doc.copy(schemaVersion = 3, unlockGrace = UnlockGraceSettings(), lastUnlockGraceEpochMillis = null)
+        }
+        return doc
     }
 
-    val all: List<DataMigration<SettingsDocument>> = listOf(V1_TO_V2)
+    val all: List<DataMigration<SettingsDocument>> = listOf(TO_CURRENT)
 }

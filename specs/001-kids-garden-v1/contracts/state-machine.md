@@ -42,6 +42,7 @@ Effects: ApplyEffectPolicy(policy, generation), PersistSettings (parent settings
 | StartChild(10–120, step 10) + same prerequisites | One new grant; clear all ParentAccess as part of commit | Normal; brief noninteractive confirmation; protected back stack cleared |
 | Invalid duration / stale permission / duplicate command | No new grant | Calm parent error, no extra duration |
 | ScreenOff or DeviceLocked | Parent mode/token revoked; child counts elapsed time unless validly call-paused | Dull intent for revoked parent; fixed package exclusions remain |
+| UserPresent in DULL, Unlock grace on, Active, setup complete, a dulling method works, rest time over (FR-037) | Start an in-memory unlock-grace grant (D = grace + fade, L = fade); save its start time | Normal, then the Soft Landing fade to DULL; no child-facing effect |
 | UserPresent | Revoke any surviving parent grant defensively; evaluate child accounting | DULL stays DULL; child/ramp continues only when valid |
 | Telephony source becomes ACTIVE | Preserve parent/DULL; freeze unexpired child C and ramp progress | Retain current policy for non-excluded traffic; no confirmation |
 | Additional/duplicate active indication | Existing union pause, no second credit | Current policy remains |

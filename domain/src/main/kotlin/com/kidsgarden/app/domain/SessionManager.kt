@@ -46,6 +46,8 @@ data class ParentFacingSnapshot(
      * example Android stopped Kids Garden in the background (FR-033). Derived, never recorded.
      */
     val backgroundStopped: Boolean = false,
+    /** The current grant is an unlock grace (FR-037), not parent-given play time. */
+    val unlockGraceActive: Boolean = false,
 )
 
 /** Parent-facing failures of a requested switch (contracts/session-manager.md). */
@@ -71,6 +73,7 @@ class SessionManager(
     private val activationStore: ActivationStore? = null,
     private val vpnLifecycle: VpnLifecycle? = null,
     private val effectSink: EffectPolicySink? = null,
+    private val unlockGraceStore: UnlockGraceStore? = null,
 ) {
     /** An event plus, for a requested switch, where to report its outcome. */
     private class Envelope(val event: DomainEvent, val reply: CompletableDeferred<Result<Unit>>? = null)
@@ -174,6 +177,10 @@ class SessionManager(
             is Effect.StartVpn -> vpnLifecycle?.startVpn()
             is Effect.StopVpn -> vpnLifecycle?.stopVpn()
             is Effect.ApplyEffectPolicy -> effectSink?.apply(effect.policy, effect.screenOn, effect.generation)
+            // Off the event loop, like every settings write.
+            is Effect.PersistUnlockGraceStart -> unlockGraceStore?.let { store ->
+                scope.launch { runCatching { store.saveUnlockGraceStart(effect.epochMillis) } }
+            }
         }
     }
 
@@ -216,5 +223,6 @@ class SessionManager(
                 state.settings.networkEnabled &&
                 state.setupComplete &&
                 state.vpnCapability == VpnCapability.UNAVAILABLE,
+            unlockGraceActive = state.childGrant?.unlockGrace == true,
         )
 }

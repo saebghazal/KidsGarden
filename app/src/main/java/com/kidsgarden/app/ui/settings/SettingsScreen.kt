@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.kidsgarden.app.R
+import com.kidsgarden.app.data.UnlockGraceSettings
+import com.kidsgarden.app.domain.UnlockGrace
 import com.kidsgarden.app.domain.DullIntensity
 import com.kidsgarden.app.domain.EffectCycle
 import com.kidsgarden.app.domain.ScreenEffect
@@ -54,6 +56,8 @@ data class SettingsUiState(
     val breakSeconds: Int = EffectCycle.DEFAULT_BREAK_SECONDS,
     /** Whether each method actually works now. */
     val methods: List<MethodStatus> = emptyList(),
+    /** Unlock grace (FR-037). */
+    val unlockGrace: UnlockGraceSettings = UnlockGraceSettings(),
 )
 
 /**
@@ -75,6 +79,7 @@ fun SettingsScreen(
     onBuildUp: (seconds: Int) -> Unit = {},
     onBreak: (seconds: Int) -> Unit = {},
     onCheckPhone: () -> Unit = {},
+    onUnlockGrace: (UnlockGraceSettings) -> Unit = {},
 ) {
     var lastMethodWarning by remember { mutableStateOf(false) }
     val enabledCount = (if (state.networkEnabled) 1 else 0) + state.enabledEffects.size
@@ -112,6 +117,8 @@ fun SettingsScreen(
 
         // The Active/Deactivated switch lives at the top of Parent options; here only the state.
         if (!state.active) BodyText(stringResource(R.string.deactivated_status))
+
+        UnlockGraceSection(state.unlockGrace, onUnlockGrace)
 
         Heading(stringResource(R.string.settings_intensity_heading))
         RadioGroup(
@@ -227,3 +234,41 @@ internal fun LabeledSwitch(label: String, checked: Boolean, onCheckedChange: (Bo
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
+
+/** Unlock grace switch and its three times (FR-037). */
+@Composable
+private fun UnlockGraceSection(grace: UnlockGraceSettings, onChange: (UnlockGraceSettings) -> Unit) {
+    Heading(stringResource(R.string.unlock_grace_heading))
+    LabeledSwitch(
+        label = stringResource(R.string.unlock_grace_switch),
+        checked = grace.enabled,
+        onCheckedChange = { onChange(grace.copy(enabled = it)) },
+    )
+    BodyText(stringResource(R.string.unlock_grace_body))
+    if (!grace.enabled) return
+    Text(stringResource(R.string.unlock_grace_time), style = MaterialTheme.typography.titleSmall)
+    RadioGroup(
+        options = UnlockGrace.GRACE_SECONDS.map { it to minutesLabel(it) },
+        selected = grace.graceSeconds,
+        onSelect = { onChange(grace.copy(graceSeconds = it)) },
+    )
+    Text(stringResource(R.string.unlock_grace_fade), style = MaterialTheme.typography.titleSmall)
+    RadioGroup(
+        options = UnlockGrace.FADE_SECONDS.map { it to minutesLabel(it) },
+        selected = grace.fadeSeconds,
+        onSelect = { onChange(grace.copy(fadeSeconds = it)) },
+    )
+    Text(stringResource(R.string.unlock_grace_rest), style = MaterialTheme.typography.titleSmall)
+    RadioGroup(
+        options = UnlockGrace.REST_SECONDS.map { it to durationLabel(it) },
+        selected = grace.restSeconds,
+        onSelect = { onChange(grace.copy(restSeconds = it)) },
+    )
+}
+
+@Composable
+private fun minutesLabel(seconds: Int): String = pluralStringResource(R.plurals.effect_minutes, seconds / 60, seconds / 60)
+
+@Composable
+private fun durationLabel(seconds: Int): String =
+    if (seconds % 3600 == 0) pluralStringResource(R.plurals.hours, seconds / 3600, seconds / 3600) else minutesLabel(seconds)

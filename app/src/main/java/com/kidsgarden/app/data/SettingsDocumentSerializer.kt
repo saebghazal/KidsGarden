@@ -16,8 +16,9 @@ import java.io.OutputStream
  *
  * - Max serialized size: 64 KiB.
  * - `schemaVersion` is read before full decoding; unsupported versions are corruption.
- *   Version 1 is decoded with v2 defaults and then migrated by [SettingsMigrations]; a v1
- *   document carrying v2 keys, or a v2 document missing any of them, is corruption.
+ *   Older versions are decoded with current defaults and then migrated by
+ *   [SettingsMigrations]; a document carrying keys of a later version, or missing keys of
+ *   its own version, is corruption.
  * - Unknown keys are corruption, except the legacy keys `mode` and `childSession`, which
  *   are ignored here and therefore dropped on the next write (FR-026).
  * - Any validation failure makes the whole document corrupt; DataStore's corruption
@@ -30,8 +31,11 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
     const val MAX_SERIALIZED_BYTES = 64 * 1024
     private val LEGACY_KEYS = setOf("mode", "childSession")
 
-    /** Keys introduced by schema v2; required in v2, absent in v1. */
-    private val V2_KEYS = setOf("active", "screenEffects", "brightnessRestore")
+    /** Keys each schema version introduced. A document must carry exactly the keys of its version and earlier. */
+    private val KEYS_ADDED_IN: Map<Int, Set<String>> = mapOf(
+        2 to setOf("active", "screenEffects", "brightnessRestore"),
+        3 to setOf("unlockGrace", "lastUnlockGraceEpochMillis"),
+    )
 
     private val json = Json {
         ignoreUnknownKeys = false
@@ -60,9 +64,11 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
             if (version !in SettingsDocument.SUPPORTED_SCHEMA_VERSIONS) {
                 throw CorruptionException("unsupported schemaVersion")
             }
-            val v2KeysPresent = V2_KEYS.count { it in root }
-            val expected = if (version == SettingsDocument.CURRENT_SCHEMA_VERSION) V2_KEYS.size else 0
-            if (v2KeysPresent != expected) throw CorruptionException("fields do not match schemaVersion")
+            for ((added, keys) in KEYS_ADDED_IN) {
+                val present = keys.count { it in root }
+                val expected = if (version >= added) keys.size else 0
+                if (present != expected) throw CorruptionException("fields do not match schemaVersion")
+            }
             val withoutLegacy = JsonObject(root.filterKeys { it !in LEGACY_KEYS })
             val document = json.decodeFromJsonElement(SettingsDocument.serializer(), withoutLegacy)
             document.validate()

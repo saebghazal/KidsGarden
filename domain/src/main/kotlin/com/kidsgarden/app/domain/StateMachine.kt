@@ -108,7 +108,7 @@ object StateMachine {
 
             DomainEvent.DeviceLocked -> screenOffOrLocked(state)
 
-            DomainEvent.UserPresent -> userPresent(state)
+            DomainEvent.UserPresent -> userPresent(state, time)
 
             DomainEvent.ManualParentExit ->
                 if (state.mode == AuthorizationMode.PARENT_MODE) revokeToDull(state) else unchanged(state)
@@ -153,6 +153,7 @@ object StateMachine {
             interactiveAndUnlocked = state.interactiveAndUnlocked,
             screenOn = state.screenOn,
             effectAccess = state.effectAccess,
+            lastUnlockGraceEpochMillis = state.lastUnlockGraceEpochMillis,
         )
 
     /** Ends every grant and all parent access immediately. */
@@ -270,10 +271,54 @@ object StateMachine {
     }
 
     /** Unlock never restores Parent Mode; a surviving Parent Mode grant is revoked defensively. */
-    private fun userPresent(state: AuthorizationState): ReduceResult {
+    private fun userPresent(state: AuthorizationState, time: TimeSnapshot): ReduceResult {
         val unlocked = state.copy(interactiveAndUnlocked = true, screenOn = true)
         if (unlocked.mode == AuthorizationMode.PARENT_MODE) return revokeToDull(unlocked)
-        return unchanged(unlocked)
+        return startUnlockGrace(unlocked, time) ?: unchanged(unlocked)
+    }
+
+    /**
+     * Unlock grace (FR-037): an unlock in DULL with the feature on, setup complete, some
+     * dulling method working and the rest period over starts a short in-memory grant (grace,
+     * then a fade through the Soft Landing ramp). Its start time is saved so a restart cannot
+     * reset the rest period. Null when no grace starts; the phone simply stays DULL.
+     */
+    private fun startUnlockGrace(state: AuthorizationState, time: TimeSnapshot): ReduceResult? {
+        val settings = state.settings
+        if (state.mode != AuthorizationMode.DULL || !settings.unlockGraceEnabled) return null
+        if (!state.setupComplete || !state.dullingCapable) return null
+        val lastStart = listOfNotNull(state.lastUnlockGraceEpochMillis, settings.lastUnlockGraceEpochMillis).maxOrNull()
+        val restMillis = settings.unlockGraceRestSeconds * MILLIS_PER_SECOND
+        if (!UnlockGrace.restOver(lastStart, time.epochMillis, restMillis)) return null
+        val fadeMillis = settings.unlockGraceFadeSeconds * MILLIS_PER_SECOND
+        val graceMillis = settings.unlockGraceSeconds * MILLIS_PER_SECOND
+        if (fadeMillis <= 0L || graceMillis <= 0L) return null
+        val e = time.elapsedMillis
+        val grant = ChildGrant(
+            durationMillis = graceMillis + fadeMillis,
+            rampMillis = fadeMillis,
+            startElapsedMillis = e,
+            startEpochMillis = time.epochMillis,
+            target = settings.dullIntensity,
+            pauseStartElapsedMillis = if (state.callState == CallSourceState.ACTIVE) e else null,
+            unlockGrace = true,
+        )
+        val next = state.copy(
+            mode = AuthorizationMode.CHILD_PLAY_SESSION,
+            childGrant = grant,
+            rampStage = null,
+            lastUnlockGraceEpochMillis = time.epochMillis,
+            generation = state.generation + 1,
+        )
+        return ReduceResult(
+            next,
+            listOfNotNull(
+                grantPolicyEffect(next, e),
+                boundaryEffect(next, e),
+                Effect.PersistUnlockGraceStart(time.epochMillis, next.generation),
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
     }
 
     /**

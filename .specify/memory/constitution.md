@@ -1,7 +1,14 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 3.1.0 → 3.1.1
+Version change: 3.1.1 → 4.0.0 (2026-10-25)
+Bump rationale: MAJOR, a principle rule is redefined. Principle I said an unlock alone never
+grants normal use. The owner added Unlock grace (spec FR-037): when the parent has it on, an
+unlock with no grant gives a short grace that fades into Dull Mode, at most once per rest
+period. The rest-period start time is the one persisted value about use. Principle III and VI
+wording now allow that single timestamp. Default on, set by the owner.
+
+Previous amendment (3.1.0 → 3.1.1, 2026-10-18):
 Bump rationale: PATCH, wording only. Principles I, III and VI said V1 stores "session state";
 the spec (FR-013, FR-027) keeps sessions in memory only. Wording now says V1 persists parent
 settings plus the saved brightness restore value (FR-034) and nothing about sessions. No rule
@@ -40,7 +47,12 @@ after the existing maintainer review requirement is satisfied.
 
 - Dull Mode MUST be the default while Kids Garden is Active. While Active, no valid Kids Garden
   authorization MUST mean Dull Mode. A normal device unlock, app launch, or successful PIN entry
-  alone MUST NOT grant normal use.
+  alone MUST NOT grant normal use, except the parent-configured Unlock grace below.
+- Unlock grace (v4.0.0): while Kids Garden is Active and the parent has it switched on, an
+  unlock from Dull Mode MAY give a short, parent-set grace that then fades gradually into Dull
+  Mode, at most once per parent-set rest period. It is never shown to the child as a message,
+  never applies during Parent Mode, play time or Deactivated, and never survives a restart as a
+  grant. Only its start time is saved, so a restart cannot reset the rest period.
 - The parent MAY turn Kids Garden off with an Active/Deactivated switch. Deactivating MUST require
   parent-interface access obtained with the Kids Garden PIN plus an explicit confirmation; it ends
   every grant and stops dulling until the parent activates again. Activating MUST require the
@@ -114,8 +126,9 @@ a dull phone that quietly stays dull avoids all three.
   inspect application-layer payloads, and it MUST NOT persist any record of traffic, destinations,
   or apps used.
 - V1 persists only (a) parent settings and (b) the parent's previous screen brightness while a
-  brightness effect is applied, so it can be restored. Session and authorization state are kept in
-  memory only. Activity logs, history, and usage reports are prohibited in V1.
+  brightness effect is applied, so it can be restored, and (c) the start time of the last Unlock
+  grace (v4.0.0), a single overwritten timestamp so a restart cannot reset the rest period. Session
+  and authorization state are kept in memory only. Activity logs, history, and usage reports are prohibited in V1.
 - V1 MUST NOT create logs in debug or release builds, including Logcat diagnostics, crash logs,
   PIN-attempt logs, network logs, call logs, or activity logs. Debug builds MUST NOT weaken this
   rule. External test tooling may retain synthetic test results outside the installed product;
@@ -167,7 +180,7 @@ Overpromising protection misleads parents.
 
 - No backend, remote server, cloud sync, or account system. Authentication is the local Parent PIN
   only.
-- No database. Settings (including the brightness restore value) are stored with Jetpack DataStore using a JSON serializer
+- No database. Settings (including the brightness restore value and the last Unlock grace start) are stored with Jetpack DataStore using a JSON serializer
   (kotlinx.serialization), accessed only through a settings repository in the data layer.
 - No analytics, crash-reporting SDKs that transmit data, advertising SDKs, or tracking of any kind.
 - The app is entirely free: no in-app purchases, subscriptions, or ads.
@@ -276,4 +289,4 @@ the device's battery.
 - Moving a V2 capability (for example, Device Owner mode or logs) into scope requires a constitution
   amendment first.
 
-**Version**: 3.1.1 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-18
+**Version**: 4.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-25

@@ -50,3 +50,8 @@ interface VpnLifecycle {
 fun interface EffectPolicySink {
     fun apply(policy: EffectPolicy, screenOn: Boolean, generation: Long)
 }
+
+/** Saves when the last unlock grace started (FR-037). */
+fun interface UnlockGraceStore {
+    suspend fun saveUnlockGraceStart(epochMillis: Long)
+}

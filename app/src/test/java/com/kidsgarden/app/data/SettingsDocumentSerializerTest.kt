@@ -25,7 +25,9 @@ class SettingsDocumentSerializerTest {
     @Test
     fun defaultsMatchDataModel() {
         val d = serializer.defaultValue
-        assertEquals(2, d.schemaVersion)
+        assertEquals(3, d.schemaVersion)
+        assertEquals(UnlockGraceSettings(enabled = true, graceSeconds = 300, fadeSeconds = 120, restSeconds = 3600), d.unlockGrace)
+        assertEquals(null, d.lastUnlockGraceEpochMillis)
         assertTrue(d.active)
         assertEquals(ScreenEffects(false, false, false, buildUpSeconds = 120, breakSeconds = 60), d.screenEffects)
         assertEquals(null, d.brightnessRestore)
@@ -78,7 +80,7 @@ class SettingsDocumentSerializerTest {
     @Test
     fun missingOrFutureSchemaIsCorruption() {
         assertCorrupt("{}")
-        val future = serializer.encode(SettingsDocument()).replace("\"schemaVersion\":2", "\"schemaVersion\":3")
+        val future = serializer.encode(SettingsDocument()).replace("\"schemaVersion\":3", "\"schemaVersion\":4")
         assertCorrupt(future)
     }
 
@@ -108,11 +110,12 @@ class SettingsDocumentSerializerTest {
     }
 
     @Test
-    fun migrationStampsV2AndIsIdempotent() {
-        val migrated = SettingsMigrations.migrateV1(serializer.decode(v1Fixture))
-        assertEquals(2, migrated.schemaVersion)
+    fun migrationReachesCurrentAndIsIdempotent() {
+        val migrated = SettingsMigrations.migrate(serializer.decode(v1Fixture))
+        assertEquals(3, migrated.schemaVersion)
+        assertTrue(migrated.unlockGrace.enabled)
         assertTrue(migrated.active)
-        assertEquals(migrated, SettingsMigrations.migrateV1(migrated))
+        assertEquals(migrated, SettingsMigrations.migrate(migrated))
         assertEquals(migrated, serializer.decode(serializer.encode(migrated)))
     }
 
@@ -126,6 +129,36 @@ class SettingsDocumentSerializerTest {
         val text = serializer.encode(SettingsDocument())
         assertCorrupt(text.replace("\"active\":true,", ""))
         assertCorrupt(text.replace("\"brightnessRestore\":null,", ""))
+    }
+
+    @Test
+    fun v2DocumentMigratesWithUnlockGraceDefaults() {
+        val v2 = serializer.encode(SettingsDocument(active = false))
+            .replace("\"schemaVersion\":3", "\"schemaVersion\":2")
+            .replace(Regex(""","unlockGrace":\{[^}]*\}"""), "")
+            .replace(",\"lastUnlockGraceEpochMillis\":null", "")
+        val decoded = serializer.decode(v2)
+        assertEquals(2, decoded.schemaVersion)
+        val migrated = SettingsMigrations.migrate(decoded)
+        assertEquals(3, migrated.schemaVersion)
+        assertFalse(migrated.active) // the parent's choice is kept
+        assertEquals(UnlockGraceSettings(), migrated.unlockGrace)
+    }
+
+    @Test
+    fun v2WithV3KeysAndV3MissingThemAreCorruption() {
+        val v3 = serializer.encode(SettingsDocument())
+        assertCorrupt(v3.replace("\"schemaVersion\":3", "\"schemaVersion\":2"))
+        assertCorrupt(v3.replace(",\"lastUnlockGraceEpochMillis\":null", ""))
+    }
+
+    @Test
+    fun unlockGraceBoundsAreEnforced() {
+        val text = serializer.encode(SettingsDocument())
+        assertCorrupt(text.replace("\"graceSeconds\":300", "\"graceSeconds\":30"))
+        assertCorrupt(text.replace("\"restSeconds\":3600", "\"restSeconds\":60"))
+        val custom = SettingsDocument(unlockGrace = UnlockGraceSettings(false, 900, 300, 14400), lastUnlockGraceEpochMillis = 123L)
+        assertEquals(custom, serializer.decode(serializer.encode(custom)))
     }
 
     @Test

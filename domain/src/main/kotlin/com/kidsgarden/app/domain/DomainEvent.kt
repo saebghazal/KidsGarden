@@ -84,6 +84,13 @@ data class DomainSettings(
     val networkEnabled: Boolean = true,
     /** Enabled screen and sound effects (FR-036). */
     val enabledEffects: Set<ScreenEffect> = emptySet(),
+    /** Unlock grace (FR-037). */
+    val unlockGraceEnabled: Boolean = false,
+    val unlockGraceSeconds: Int = UnlockGrace.DEFAULT_GRACE_SECONDS,
+    val unlockGraceFadeSeconds: Int = UnlockGrace.DEFAULT_FADE_SECONDS,
+    val unlockGraceRestSeconds: Int = UnlockGrace.DEFAULT_REST_SECONDS,
+    /** When the last unlock grace started (epoch), saved so a restart cannot reset the rest. */
+    val lastUnlockGraceEpochMillis: Long? = null,
 )
 
 /** Live shaping capability reported by the VPN controller. A saved preference is not proof. */
@@ -142,4 +149,7 @@ sealed interface Effect {
 
     /** Screen and sound effects; [screenOn] lets the platform stop or restart the cycle. */
     data class ApplyEffectPolicy(val policy: EffectPolicy, val screenOn: Boolean, override val generation: Long) : Effect
+
+    /** Save when an unlock grace started (FR-037). Only that time is stored. */
+    data class PersistUnlockGraceStart(val epochMillis: Long, override val generation: Long) : Effect
 }

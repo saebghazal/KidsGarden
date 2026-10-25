@@ -87,6 +87,14 @@ class SettingsRepository(
     suspend fun updateEffectTiming(buildUpSeconds: Int, breakSeconds: Int): Result<SettingsDocument> =
         update { it.copy(screenEffects = it.screenEffects.copy(buildUpSeconds = buildUpSeconds, breakSeconds = breakSeconds)) }
 
+    /** Unlock grace switch and times (FR-037); values outside the offered choices are rejected. */
+    suspend fun updateUnlockGrace(enabled: Boolean, graceSeconds: Int, fadeSeconds: Int, restSeconds: Int): Result<SettingsDocument> =
+        update { it.copy(unlockGrace = UnlockGraceSettings(enabled, graceSeconds, fadeSeconds, restSeconds)) }
+
+    /** When the last unlock grace started; written by SessionManager only (FR-037). */
+    suspend fun saveUnlockGraceStart(epochMillis: Long): Result<SettingsDocument> =
+        update { it.copy(lastUnlockGraceEpochMillis = epochMillis) }
+
     /**
      * Called by ScreenEffectsController only: set once before the first brightness change in
      * a DULL period, cleared (null) after restore.

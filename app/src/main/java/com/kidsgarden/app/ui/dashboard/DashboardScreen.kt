@@ -43,7 +43,7 @@ fun DashboardScreen(
     ) {
         // While Deactivated the mode line says plainly that the phone is not dulled.
         if (state.active) BodyText(stringResource(R.string.active_status))
-        BodyText(stringResource(modeText(state.displayMode)))
+        BodyText(stringResource(if (state.unlockGrace) R.string.mode_unlock_grace else modeText(state.displayMode)))
         state.remainingPlayMillis?.let { remaining ->
             BodyText(
                 if (state.playPaused) stringResource(R.string.dashboard_paused)

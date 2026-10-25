@@ -109,20 +109,20 @@ class SettingsRepositoryTest {
         """"softLandingDurationSeconds":120,"setup":{"pinCreated":false,"onboardingComplete":false}}"""
 
     @Test
-    fun v1FileMigratesToV2WithActiveTrue() = runTest {
+    fun v1FileMigratesToCurrentWithActiveTrue() = runTest {
         val file = File(tmp.root, "v1.json").apply { writeText(v1Text) }
         val repo = repository(file)
         val doc = repo.load().getOrThrow()
-        assertEquals(2, doc.schemaVersion)
+        assertEquals(3, doc.schemaVersion)
         assertTrue(doc.active)
         assertEquals(DullIntensity.GENTLE, doc.dullIntensity)
-        assertTrue(file.readText().contains("\"schemaVersion\":2"))
+        assertTrue(file.readText().contains("\"schemaVersion\":3"))
     }
 
     @Test
     fun defaultsAndCorruptionAreActive() = runTest {
         assertTrue(repository().load().getOrThrow().active)
-        val file = File(tmp.root, "bad.json").apply { writeText("{\"schemaVersion\":2}") }
+        val file = File(tmp.root, "bad.json").apply { writeText("{\"schemaVersion\":3}") }
         assertTrue(repository(file).load().getOrThrow().active)
     }
 
@@ -179,5 +179,14 @@ class SettingsRepositoryTest {
         val saved = BrightnessRestore(level = 200, automatic = true)
         assertEquals(saved, repo.saveBrightnessRestore(saved).getOrThrow().brightnessRestore)
         assertEquals(null, repo.saveBrightnessRestore(null).getOrThrow().brightnessRestore)
+    }
+
+    @Test
+    fun unlockGraceSettingsAndStartTime() = runTest {
+        val repo = repository()
+        assertTrue(repo.updateUnlockGrace(true, 30, 120, 3600).exceptionOrNull() is SettingsFailure.InvalidValue)
+        val doc = repo.updateUnlockGrace(false, 600, 60, 7200).getOrThrow()
+        assertEquals(UnlockGraceSettings(false, 600, 60, 7200), doc.unlockGrace)
+        assertEquals(42L, repo.saveUnlockGraceStart(42L).getOrThrow().lastUnlockGraceEpochMillis)
     }
 }

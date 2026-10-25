@@ -4,20 +4,23 @@ import com.kidsgarden.app.domain.DomainSettings
 import com.kidsgarden.app.domain.DullIntensity
 import com.kidsgarden.app.domain.EffectCycle
 import com.kidsgarden.app.domain.ScreenEffect
+import com.kidsgarden.app.domain.UnlockGrace
 import kotlinx.serialization.Serializable
 
 /**
- * Persisted SettingsDocument v2 (data-model.md). Parent settings only: there is no
+ * Persisted SettingsDocument v3 (data-model.md). Parent settings only: there is no
  * authorization mode, child session, pause, token, or call field (FR-025).
  *
  * | Field | Type / default | Validation and meaning |
- * | schemaVersion | Int / 2 | Explicit positive supported version (1 or 2); v1 is migrated |
+ * | schemaVersion | Int / 3 | Explicit positive supported version (1, 2 or 3); older versions are migrated |
  * | active | Boolean / true | Parent Active/Deactivated choice (FR-031); false only after a confirmed Deactivate |
  * | pinCredential | PinCredential? / null | Null means enrollment/recovery, never empty-PIN access |
  * | dullIntensity | Enum / MEDIUM | GENTLE, MEDIUM, STRONG |
  * | vpnDullingEnabled | Boolean / false | Network dulling switch; parent preference, not live consent or running-service proof |
  * | screenEffects | ScreenEffects | Grey screen, lower media volume, lower brightness switches and cycle timings |
  * | brightnessRestore | BrightnessRestore? / null | Parent brightness saved before the brightness effect first lowers it |
+ * | unlockGrace | UnlockGraceSettings | Unlock grace switch (on by default) and grace, fade and rest times (FR-037) |
+ * | lastUnlockGraceEpochMillis | Long? / null | When the last unlock grace started; only so a restart cannot reset the rest |
  * | vpnDullingConfiguration | ProfileConfiguration | Canonical profile map, no redundant top-level cap values |
  * | softLandingDurationSeconds | Int / 120 | Exactly 60 or 120 |
  * | setup | SetupFlags | pinCreated and onboardingComplete; permission status is runtime-derived |
@@ -31,6 +34,8 @@ data class SettingsDocument(
     val vpnDullingEnabled: Boolean = false,
     val screenEffects: ScreenEffects = ScreenEffects(),
     val brightnessRestore: BrightnessRestore? = null,
+    val unlockGrace: UnlockGraceSettings = UnlockGraceSettings(),
+    val lastUnlockGraceEpochMillis: Long? = null,
     val vpnDullingConfiguration: Map<DullIntensity, ThrottleSettings> = DEFAULT_PROFILES,
     val softLandingDurationSeconds: Int = 120,
     val setup: SetupFlags = SetupFlags(),
@@ -43,6 +48,8 @@ data class SettingsDocument(
         check(schemaVersion in SUPPORTED_SCHEMA_VERSIONS) { "unsupported schemaVersion $schemaVersion" }
         screenEffects.validate()
         brightnessRestore?.validate()
+        unlockGrace.validate()
+        lastUnlockGraceEpochMillis?.let { check(it >= 0L) { "lastUnlockGraceEpochMillis must not be negative" } }
         check(softLandingDurationSeconds == 60 || softLandingDurationSeconds == 120) {
             "softLandingDurationSeconds must be exactly 60 or 120"
         }
@@ -71,6 +78,11 @@ data class SettingsDocument(
         active = active,
         networkEnabled = vpnDullingEnabled,
         enabledEffects = screenEffects.enabled(),
+        unlockGraceEnabled = unlockGrace.enabled,
+        unlockGraceSeconds = unlockGrace.graceSeconds,
+        unlockGraceFadeSeconds = unlockGrace.fadeSeconds,
+        unlockGraceRestSeconds = unlockGrace.restSeconds,
+        lastUnlockGraceEpochMillis = lastUnlockGraceEpochMillis,
     )
 
     /** True when at least one of the four dulling methods is switched on (FR-023). */
@@ -82,9 +94,9 @@ data class SettingsDocument(
     }
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 2
+        const val CURRENT_SCHEMA_VERSION = 3
         const val LEGACY_SCHEMA_VERSION = 1
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(LEGACY_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, CURRENT_SCHEMA_VERSION)
 
         /** Initial values: Gentle 256/300; Medium 128/600; Strong 64/1000. */
         val DEFAULT_PROFILES: Map<DullIntensity, ThrottleSettings> = mapOf(
@@ -206,5 +218,23 @@ data class BrightnessRestore(
 ) {
     fun validate() {
         if (level !in 0..255) throw SettingsValidationException("brightness level out of range")
+    }
+}
+
+/**
+ * Unlock grace (FR-037, owner change 2026-10-25): on by default. Times are limited to the
+ * offered choices.
+ */
+@Serializable
+data class UnlockGraceSettings(
+    val enabled: Boolean = UnlockGrace.DEFAULT_ENABLED,
+    val graceSeconds: Int = UnlockGrace.DEFAULT_GRACE_SECONDS,
+    val fadeSeconds: Int = UnlockGrace.DEFAULT_FADE_SECONDS,
+    val restSeconds: Int = UnlockGrace.DEFAULT_REST_SECONDS,
+) {
+    fun validate() {
+        if (graceSeconds !in UnlockGrace.GRACE_SECONDS) throw SettingsValidationException("graceSeconds not allowed")
+        if (fadeSeconds !in UnlockGrace.FADE_SECONDS) throw SettingsValidationException("fadeSeconds not allowed")
+        if (restSeconds !in UnlockGrace.REST_SECONDS) throw SettingsValidationException("restSeconds not allowed")
     }
 }

@@ -34,6 +34,8 @@ data class DashboardUiState(
     /** Android stopped Kids Garden in the background (FR-033). */
     val backgroundStopped: Boolean = false,
     val methods: List<MethodStatus> = emptyList(),
+    /** The current grant is an unlock grace, not play time (FR-037). */
+    val unlockGrace: Boolean = false,
 )
 
 /**
@@ -96,6 +98,7 @@ class DashboardViewModel(
                 active = snapshot.active,
                 backgroundStopped = showBackgroundStop(snapshot, vpnReason),
                 methods = if (snapshot.active) methodStatuses(snapshot) else emptyList(),
+                unlockGrace = snapshot.unlockGraceActive,
             )
         }
     }

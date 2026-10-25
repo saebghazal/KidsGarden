@@ -38,6 +38,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.kidsgarden.app.AppContainer
 import com.kidsgarden.app.data.SetupFlags
+import com.kidsgarden.app.data.UnlockGraceSettings
 import com.kidsgarden.app.domain.AuthorizationMode
 import com.kidsgarden.app.domain.CallDetectionCapability
 import com.kidsgarden.app.domain.DisplayMode
@@ -196,7 +197,7 @@ fun KidsGardenNavHost(
                 openParentInterface(
                     when {
                         setup?.onboardingComplete != true -> Routes.NOTIFICATIONS
-                        session.state.value.remainingPlayMillis != null -> Routes.DASHBOARD
+                        session.state.value.remainingPlayMillis != null && !session.state.value.unlockGraceActive -> Routes.DASHBOARD
                         else -> Routes.ACTIONS
                     },
                 )
@@ -389,7 +390,11 @@ fun KidsGardenNavHost(
                     buildUpSeconds = document?.screenEffects?.buildUpSeconds ?: EffectCycle.DEFAULT_BUILD_UP_SECONDS,
                     breakSeconds = document?.screenEffects?.breakSeconds ?: EffectCycle.DEFAULT_BREAK_SECONDS,
                     methods = methodStatuses(snapshot),
+                    unlockGrace = document?.unlockGrace ?: UnlockGraceSettings(),
                 ),
+                onUnlockGrace = { g ->
+                    save { repository.updateUnlockGrace(g.enabled, g.graceSeconds, g.fadeSeconds, g.restSeconds) }
+                },
                 onEffectSwitch = { effect, on ->
                     document?.let { current ->
                         val effects = current.screenEffects.enabled().let { if (on) it + effect else it - effect }

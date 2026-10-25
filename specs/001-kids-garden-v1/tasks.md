@@ -288,6 +288,17 @@ description: "Task list for Kids Garden V1"
 - [X] T127 Parent options names a missing effect access ("Grey screen needs Display over other apps") and opens it, instead of the VPN setup message
 - [X] T128 PIN credential v2: 180000 PBKDF2 rounds (70% fewer than v1); v1 credentials verified and re-hashed as v2 on the next correct PIN; tests in `PinHasherTest.kt` and `ParentPinManagerTest.kt` (FR-005)
 
+## Phase 12: Unlock grace (FR-037, added 2026-10-25)
+
+**Goal**: An unlock without the PIN gives a short, parent-set grace that fades into DULL, then a rest time during which unlocks stay dull. Constitution v4.0.0.
+
+- [X] T129 Add `UnlockGrace` limits and rest rule, `ChildGrant.unlockGrace`, grace fields in `DomainSettings`, `PersistUnlockGraceStart` effect and `UnlockGraceStore` port in `domain/`
+- [X] T130 Start the grace from `UserPresent` in `StateMachine.kt` (DULL, Active, setup complete, a method working, rest over); reuse the Soft Landing ramp, call pause and expiry
+- [X] T131 [P] Add `domain/src/test/kotlin/com/kidsgarden/app/domain/UnlockGraceTest.kt`: start, fade, lock invariance, rest, restart, clock set back, off/Deactivated/unprotected, no grace during grants, call pause, replacement, effects
+- [X] T132 Settings schema v3: `unlockGrace` and `lastUnlockGraceEpochMillis`, v1/v2 → v3 migration, per-version key checks, `updateUnlockGrace` and `saveUnlockGraceStart`; tests in `app/src/test/java/com/kidsgarden/app/data/`
+- [X] T133 Unlock grace section in `SettingsScreen.kt`; grace shown on the dashboard; wiring in `AppContainer.kt` and `KidsGardenNavHost.kt`; strings
+- [ ] T134 Device check on API 35/36: grace starts on unlock, fades, rest keeps the phone dull, reboot within rest gives no new grace
+
 ---
 
 ## Dependencies & Execution Order
