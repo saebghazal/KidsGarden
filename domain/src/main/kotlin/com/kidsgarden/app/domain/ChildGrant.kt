@@ -25,6 +25,8 @@ data class ChildGrant(
     val target: DullIntensity,
     val completedPauseMillis: Long = 0L,
     val pauseStartElapsedMillis: Long? = null,
+    /** Started by an unlock with no PIN (FR-037), not by a parent. */
+    val unlockGrace: Boolean = false,
 ) {
     init {
         require(durationMillis > 0L) { "duration must be positive" }

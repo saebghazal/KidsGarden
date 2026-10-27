@@ -65,6 +65,13 @@ class StoragePrivacyTest {
         "derivedKeyLengthBytes", "salt", "hash", "dullIntensity", "vpnDullingEnabled",
         "vpnDullingConfiguration", "GENTLE", "MEDIUM", "STRONG", "bandwidthKbps",
         "addedRttLatencyMs", "softLandingDurationSeconds", "setup", "pinCreated", "onboardingComplete",
+        // Schema v2 (FR-031, FR-034–036): parent choices and the parent's own brightness only.
+        "active", "screenEffects", "greyScreenEnabled", "lowerVolumeEnabled", "lowerBrightnessEnabled",
+        "buildUpSeconds", "breakSeconds", "brightnessRestore", "level", "automatic",
+        // Schema v3 (FR-037): grace settings and the start time of the last grace only.
+        "unlockGrace", "enabled", "graceSeconds", "fadeSeconds", "restSeconds", "lastUnlockGraceEpochMillis",
+        // Schema v4 (FR-038): apps the parent lets skip Kids Garden.
+        "bypassPackages",
     )
 
     private fun keys(element: JsonElement): Set<String> = when (element) {
@@ -84,6 +91,13 @@ class StoragePrivacyTest {
         repository.updateSoftLandingDuration(60).getOrThrow()
         repository.updateVpnPreference(true).getOrThrow()
         repository.updateSetupFlags(SetupFlags(pinCreated = true, onboardingComplete = true)).getOrThrow()
+        repository.updateMethodSwitches(network = true, grey = true, volume = true, brightness = true).getOrThrow()
+        repository.updateEffectTiming(buildUpSeconds = 60, breakSeconds = 0).getOrThrow()
+        repository.saveBrightnessRestore(BrightnessRestore(level = 120, automatic = true)).getOrThrow()
+        repository.saveBrightnessRestore(null).getOrThrow()
+        // Deactivate and Activate write only the `active` flag (T109).
+        repository.updateActive(false).getOrThrow()
+        repository.updateActive(true).getOrThrow()
 
         // Wrong PINs, including enough to trigger the retry delay.
         repeat(6) { pins.verify("000000".toCharArray()) }
@@ -116,7 +130,7 @@ class StoragePrivacyTest {
         session.dispatch(DomainEvent.CallAggregateChanged(CallObservation(CallSourceState.INACTIVE, 1, elapsed)))
         elapsed += 11 * 60_000
         session.dispatch(DomainEvent.DeadlineObserved(0))
-        session.dispatch(DomainEvent.ProcessStarted)
+        session.dispatch(DomainEvent.ProcessStarted())
         delay(200)
 
         assertArrayEquals("session activity must never write settings", afterSettings, file.readBytes())

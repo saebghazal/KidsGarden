@@ -13,4 +13,13 @@ class AndroidVpnServiceLauncher(private val context: Context) : VpnServiceLaunch
         val intent = Intent(context, KidsGardenVpnService::class.java).setAction(KidsGardenVpnService.ACTION_START)
         context.startForegroundService(intent)
     }
+
+    override fun reconfigure() {
+        val intent = Intent(context, KidsGardenVpnService::class.java).setAction(KidsGardenVpnService.ACTION_RECONFIGURE)
+        try {
+            context.startService(intent)
+        } catch (_: IllegalStateException) {
+            // Not allowed right now; the next VPN start applies the list.
+        }
+    }
 }

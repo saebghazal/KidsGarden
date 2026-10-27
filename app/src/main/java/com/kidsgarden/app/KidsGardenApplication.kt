@@ -1,7 +1,6 @@
 package com.kidsgarden.app
 
 import android.app.Application
-import com.kidsgarden.app.domain.DomainEvent
 
 class KidsGardenApplication : Application() {
 
@@ -10,9 +9,8 @@ class KidsGardenApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The container reports ProcessStarted once settings have loaded, so a saved
+        // Deactivated choice is honoured (FR-031). Until then the state is DULL with no grant.
         container = AppContainer(this)
-        // A new process always starts at DULL with no grant (FR-027); this event
-        // makes that explicit to the reducer and applies the matching policy.
-        container.sessionManager.dispatch(DomainEvent.ProcessStarted)
     }
 }

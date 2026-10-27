@@ -11,6 +11,7 @@ package com.kidsgarden.app.domain
 object DullModePolicy {
 
     fun policyFor(state: AuthorizationState, e: Long): NetworkPolicy {
+        if (state.mode == AuthorizationMode.DEACTIVATED) return NetworkPolicy.Unavailable(StateMachine.REASON_DEACTIVATED)
         if (state.vpnCapability != VpnCapability.RUNNING) {
             return NetworkPolicy.Unavailable(StateMachine.REASON_VPN_UNAVAILABLE)
         }
@@ -21,6 +22,7 @@ object DullModePolicy {
             AuthorizationMode.CHILD_PLAY_SESSION -> if (grant == null) dull(state) else NetworkPolicy.Normal
             AuthorizationMode.SOFT_LANDING ->
                 if (grant == null) dull(state) else SoftLandingPolicy.policy(grant, e)
+            AuthorizationMode.DEACTIVATED -> NetworkPolicy.Unavailable(StateMachine.REASON_DEACTIVATED)
         }
     }
 

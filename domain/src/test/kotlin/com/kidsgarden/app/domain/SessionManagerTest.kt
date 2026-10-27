@@ -45,7 +45,7 @@ class SessionManagerTest {
         val scheduler = RecordingScheduler()
         val manager = manager(sink, scheduler)
 
-        manager.dispatch(DomainEvent.ProcessStarted)
+        manager.dispatch(DomainEvent.ProcessStarted())
 
         assertEquals(AuthorizationMode.DULL, manager.state.value.authorizationMode)
         assertTrue(sink.applied.single().first is NetworkPolicy.Unavailable)
@@ -54,15 +54,92 @@ class SessionManagerTest {
     }
 
     @Test
-    fun pinThenUiLeftOpensAndClosesParentAccess() = runTest {
+    fun pinOpensParentAccessAndLockClosesIt() = runTest {
         val manager = manager(RecordingSink(), RecordingScheduler())
 
         manager.dispatch(DomainEvent.PinVerified)
         assertTrue(manager.state.value.parentAccessActive)
         assertEquals(AuthorizationMode.DULL, manager.state.value.authorizationMode)
 
-        manager.dispatch(DomainEvent.ParentUiLeft)
+        manager.dispatch(DomainEvent.UiOpened)
+        assertTrue(manager.state.value.parentAccessActive)
+        manager.dispatch(DomainEvent.DeviceLocked)
         assertFalse(manager.state.value.parentAccessActive)
+    }
+
+    private class RecordingVpn : VpnLifecycle {
+        var starts = 0
+        var stops = 0
+        override fun startVpn() {
+            starts++
+        }
+        override fun stopVpn() {
+            stops++
+        }
+    }
+
+    @Test
+    fun deactivateSavesThenStopsVpn() = runTest {
+        val saved = mutableListOf<Boolean>()
+        val vpn = RecordingVpn()
+        val manager = SessionManager(
+            FakeTimeProvider(), RecordingSink(), RecordingScheduler(), eagerScope(),
+            activationStore = { saved += it; true },
+            vpnLifecycle = vpn,
+        )
+        manager.dispatch(DomainEvent.PinVerified)
+
+        val result = manager.deactivate(confirmed = true)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(false), saved)
+        assertEquals(1, vpn.stops)
+        assertEquals(DisplayMode.DEACTIVATED, manager.state.value.displayMode)
+        assertFalse(manager.state.value.active)
+    }
+
+    @Test
+    fun failedDeactivateSaveReportsStorageAndKeepsState() = runTest {
+        val vpn = RecordingVpn()
+        val manager = SessionManager(
+            FakeTimeProvider(), RecordingSink(), RecordingScheduler(), eagerScope(),
+            activationStore = { false },
+            vpnLifecycle = vpn,
+        )
+        manager.dispatch(DomainEvent.PinVerified)
+
+        val result = manager.deactivate(confirmed = true)
+
+        assertTrue(result.exceptionOrNull() is SessionError.StorageUnavailable)
+        assertEquals(0, vpn.stops)
+        assertTrue(manager.state.value.active)
+    }
+
+    @Test
+    fun rejectedRequestsReturnStale() = runTest {
+        val manager = SessionManager(
+            FakeTimeProvider(), RecordingSink(), RecordingScheduler(), eagerScope(),
+            activationStore = { true },
+        )
+        assertTrue(manager.deactivate(confirmed = true).exceptionOrNull() is SessionError.StaleRequest)
+        assertTrue(manager.activate().exceptionOrNull() is SessionError.StaleRequest)
+    }
+
+    @Test
+    fun activateFromParentInterfaceStartsVpn() = runTest {
+        val vpn = RecordingVpn()
+        val manager = SessionManager(
+            FakeTimeProvider(), RecordingSink(), RecordingScheduler(), eagerScope(),
+            activationStore = { true },
+            vpnLifecycle = vpn,
+        )
+        manager.dispatch(DomainEvent.ProcessStarted(savedActive = false))
+        manager.dispatch(DomainEvent.PinVerified)
+
+        assertTrue(manager.activate().isSuccess)
+        assertEquals(1, vpn.starts)
+        assertEquals(AuthorizationMode.DULL, manager.state.value.authorizationMode)
+        assertTrue(manager.state.value.parentAccessActive)
     }
 
     @Test
@@ -72,7 +149,7 @@ class SessionManagerTest {
         eagerScope().launch { manager.parentUiAccessCleared.collect { cleared += it } }
 
         manager.dispatch(DomainEvent.PinVerified)
-        manager.dispatch(DomainEvent.ParentUiLeft)
+        manager.dispatch(DomainEvent.ScreenOff)
 
         assertEquals(1, cleared.size)
     }

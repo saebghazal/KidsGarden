@@ -20,17 +20,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kidsgarden.app.R
 import com.kidsgarden.app.domain.TimeProvider
+import com.kidsgarden.app.ui.dashboard.DeactivatedBanner
 import com.kidsgarden.app.ui.setup.SetupScaffold
 import kotlinx.coroutines.delay
 
 /** Default entry once a PIN exists. Reports success once through [onAccepted]. */
 @Composable
-fun ParentPinScreen(viewModel: ParentPinViewModel, time: TimeProvider, onAccepted: () -> Unit) {
+fun ParentPinScreen(viewModel: ParentPinViewModel, time: TimeProvider, onAccepted: () -> Unit, deactivated: Boolean = false) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state) {
         if (state == ParentPinViewModel.State.Accepted) onAccepted()
     }
-    ParentPinContent(state = state, time = time, onSubmit = viewModel::submit)
+    ParentPinContent(state = state, time = time, onSubmit = viewModel::submit, deactivated = deactivated)
 }
 
 /** Masked entry, calm wrong-PIN text, and the retry-delay countdown (display only). */
@@ -39,6 +40,8 @@ fun ParentPinContent(
     state: ParentPinViewModel.State,
     time: TimeProvider,
     onSubmit: (CharArray) -> Unit,
+    /** While Kids Garden is off, say so before anything else (FR-031). */
+    deactivated: Boolean = false,
 ) {
     var pin by remember { mutableStateOf("") }
     var nowElapsed by remember { mutableLongStateOf(time.elapsedRealtimeMillis()) }
@@ -70,6 +73,7 @@ fun ParentPinContent(
             }
         },
     ) {
+        if (deactivated) DeactivatedBanner()
         PinField(value = pin, onValueChange = { pin = it }, label = stringResource(R.string.pin_label), enabled = !busy)
         val message: String? = when {
             waitSeconds > 0 -> pluralStringResource(R.plurals.pin_retry_delay, waitSeconds.toInt(), waitSeconds.toInt())

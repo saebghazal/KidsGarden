@@ -1,5 +1,6 @@
 package com.kidsgarden.app.security
 
+import com.kidsgarden.app.data.PinCredential
 import com.kidsgarden.app.data.SettingsRepository
 import com.kidsgarden.app.domain.TimeProvider
 import kotlinx.coroutines.CoroutineDispatcher
@@ -92,10 +93,21 @@ class ParentPinManager(
         val matches = withContext(hashDispatcher) { hasher.verify(pin, credential) }
         return if (matches) {
             consecutiveFailures = 0
+            if (credential.outdated) upgrade(pin, credential)
             PinOutcome.Accepted
         } else {
             recordFailure(now)
         }
+    }
+
+    /**
+     * Re-hashes a correct PIN held in an older credential version with the current one (owner
+     * change 2026-10-21: 180000 rounds instead of 600000). Same PIN, new salt. A failed save
+     * only means the upgrade is tried again at the next correct PIN; the unlock still succeeds.
+     */
+    private suspend fun upgrade(pin: CharArray, old: PinCredential) {
+        val replacement = withContext(hashDispatcher) { hasher.create(pin) }
+        repository.changeCredential(expected = old, newCredential = replacement)
     }
 
     private fun recordFailure(now: Long): PinOutcome {

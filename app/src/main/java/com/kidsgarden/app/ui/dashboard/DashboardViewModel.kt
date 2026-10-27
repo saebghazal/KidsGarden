@@ -9,6 +9,8 @@ import com.kidsgarden.app.domain.ParentFacingSnapshot
 import com.kidsgarden.app.domain.SetupStatus
 import com.kidsgarden.app.domain.TimeProvider
 import com.kidsgarden.app.domain.VpnCapability
+import com.kidsgarden.app.vpn.VpnUnavailableReason
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +29,13 @@ data class DashboardUiState(
     val remainingPlayMillis: Long?,
     val playPaused: Boolean,
     val showCallLimitation: Boolean,
+    /** False while Deactivated (FR-031). */
+    val active: Boolean = true,
+    /** Android stopped Kids Garden in the background (FR-033). */
+    val backgroundStopped: Boolean = false,
+    val methods: List<MethodStatus> = emptyList(),
+    /** The current grant is an unlock grace, not play time (FR-037). */
+    val unlockGrace: Boolean = false,
 )
 
 /**
@@ -37,6 +46,8 @@ class DashboardViewModel(
     snapshot: StateFlow<ParentFacingSnapshot>,
     setup: StateFlow<SetupStatus?>,
     time: TimeProvider,
+    /** Current coarse VPN reason; decides whether the stop was a background stop. */
+    vpnReason: StateFlow<VpnUnavailableReason?> = MutableStateFlow(null),
 ) : ViewModel() {
 
     private val ticks: Flow<Long> = flow {
@@ -47,8 +58,12 @@ class DashboardViewModel(
     }
 
     val state: StateFlow<DashboardUiState> =
-        combine(snapshot, setup, ticks) { s, setupStatus, now -> dashboardState(s, setupStatus, now) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), dashboardState(snapshot.value, setup.value, time.elapsedRealtimeMillis()))
+        combine(snapshot, setup, vpnReason, ticks) { s, setupStatus, reason, now -> dashboardState(s, setupStatus, now, reason) }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+                dashboardState(snapshot.value, setup.value, time.elapsedRealtimeMillis(), vpnReason.value),
+            )
 
     companion object {
         private const val TICK_MS = 1_000L
@@ -58,7 +73,12 @@ class DashboardViewModel(
          * Pure projection. While playing, the shown remainder counts down from the
          * snapshot; while paused it stays frozen. It never goes below zero.
          */
-        fun dashboardState(snapshot: ParentFacingSnapshot, setup: SetupStatus?, nowElapsed: Long): DashboardUiState {
+        fun dashboardState(
+            snapshot: ParentFacingSnapshot,
+            setup: SetupStatus?,
+            nowElapsed: Long,
+            vpnReason: VpnUnavailableReason? = null,
+        ): DashboardUiState {
             val remaining = snapshot.remainingPlayMillis?.let { atSnapshot ->
                 if (snapshot.playPaused) {
                     atSnapshot
@@ -75,6 +95,10 @@ class DashboardViewModel(
                 remainingPlayMillis = remaining,
                 playPaused = snapshot.playPaused,
                 showCallLimitation = snapshot.callCapability != CallDetectionCapability.AVAILABLE,
+                active = snapshot.active,
+                backgroundStopped = showBackgroundStop(snapshot, vpnReason),
+                methods = if (snapshot.active) methodStatuses(snapshot) else emptyList(),
+                unlockGrace = snapshot.unlockGraceActive,
             )
         }
     }

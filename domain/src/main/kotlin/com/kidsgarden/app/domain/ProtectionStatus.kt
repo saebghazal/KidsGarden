@@ -30,6 +30,7 @@ object ProtectionStatusMapper {
             AuthorizationMode.PARENT_MODE -> DisplayMode.PARENT_MODE
             AuthorizationMode.CHILD_PLAY_SESSION -> DisplayMode.CHILD_PLAY_SESSION
             AuthorizationMode.SOFT_LANDING -> DisplayMode.SOFT_LANDING
+            AuthorizationMode.DEACTIVATED -> DisplayMode.DEACTIVATED
         }
         return ProtectionStatus(displayMode, shapingActive, remedyFor(setup))
     }

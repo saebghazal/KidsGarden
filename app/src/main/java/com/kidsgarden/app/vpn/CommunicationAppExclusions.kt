@@ -61,13 +61,18 @@ data class ExclusionResult(
  */
 class CommunicationAppExclusions(private val resolver: CommunicationPackageResolver) {
 
-    fun apply(target: ExclusionTarget): ExclusionResult {
+    /**
+     * [parentBypass] adds the apps the parent chose to skip Kids Garden (FR-038). They are
+     * excluded the same way; a missing one is skipped without affecting the others.
+     */
+    fun apply(target: ExclusionTarget, parentBypass: Collection<String> = emptyList()): ExclusionResult {
         var unresolved = 0
         val candidates = linkedSetOf<String>()
         for (resolved in listOf(resolver.defaultDialer(), resolver.systemDialer(), resolver.defaultSms())) {
             if (resolved.isNullOrBlank()) unresolved++ else candidates += resolved
         }
         candidates += WHATSAPP
+        candidates += parentBypass
         // Never exclude Kids Garden itself: its own traffic must stay inside its VPN.
         candidates -= resolver.ownPackage
 

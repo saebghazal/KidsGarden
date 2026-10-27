@@ -26,9 +26,10 @@ class PinHasherTest {
     @Test
     fun credentialHasExactParameters() {
         val c = hasher.create("123456".toCharArray())
-        assertEquals(1, c.credentialVersion)
+        assertEquals(2, c.credentialVersion)
         assertEquals("PBKDF2WithHmacSHA256", c.algorithm)
-        assertEquals(600_000, c.iterations)
+        assertEquals(180_000, c.iterations)
+        assertFalse(c.outdated)
         assertEquals(32, c.derivedKeyLengthBytes)
         assertEquals(16, Base64.getDecoder().decode(c.salt).size)
         assertEquals(32, Base64.getDecoder().decode(c.hash).size)
@@ -56,5 +57,22 @@ class PinHasherTest {
         assertFalse(hasher.verify(pin.toCharArray(), good.copy(algorithm = "PBKDF2WithHmacSHA1")))
         assertFalse(hasher.verify(pin.toCharArray(), good.copy(salt = "not-base64!")))
         assertFalse(hasher.verify(pin.toCharArray(), good.copy(hash = Base64.getEncoder().encodeToString(ByteArray(8)))))
+    }
+
+    @Test
+    fun legacyVersionOneStillVerifies() {
+        val v1 = LegacyCredentials.v1("4321")
+        assertTrue(v1.outdated)
+        assertTrue(hasher.verify("4321".toCharArray(), v1))
+        assertFalse(hasher.verify("4322".toCharArray(), v1))
+    }
+
+    @Test
+    fun roundsAreFixedPerVersion() {
+        val v2 = hasher.create("1234".toCharArray())
+        // A stored file cannot pick its own work factor.
+        assertFalse(hasher.verify("1234".toCharArray(), v2.copy(iterations = 600_000)))
+        assertFalse(hasher.verify("1234".toCharArray(), v2.copy(credentialVersion = 1)))
+        assertFalse(hasher.verify("1234".toCharArray(), v2.copy(credentialVersion = 3)))
     }
 }

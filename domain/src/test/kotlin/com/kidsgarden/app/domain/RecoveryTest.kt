@@ -10,7 +10,7 @@ import org.junit.Test
 /** Recovery always ends in DULL with no restored authorization (T083). */
 class RecoveryTest {
 
-    private val restarts = listOf(DomainEvent.ProcessStarted, DomainEvent.RebootObserved, DomainEvent.PackageReplaced)
+    private val restarts = listOf(DomainEvent.ProcessStarted(), DomainEvent.RebootObserved, DomainEvent.PackageReplaced)
 
     private fun busyStates(): List<ReducerHarness> = listOf(
         ReducerHarness().apply { startChild(30) },
@@ -42,7 +42,7 @@ class RecoveryTest {
     fun restartKeepsSettingsAndLiveCapabilities() {
         val h = ReducerHarness()
         h.startChild(30)
-        h.send(DomainEvent.ProcessStarted)
+        h.send(DomainEvent.ProcessStarted())
         assertTrue(h.state.settings.credentialPresent)
         assertEquals(VpnCapability.RUNNING, h.state.vpnCapability)
         assertEquals(NetworkPolicy.Dull(DullIntensity.MEDIUM), h.lastPolicy())
@@ -113,7 +113,7 @@ class RecoveryTest {
             DomainEvent.DeadlineObserved(h.state.generation),
             DomainEvent.SettingsWriteSucceeded,
             DomainEvent.PinVerified,
-            DomainEvent.ProcessStarted,
+            DomainEvent.ProcessStarted(),
         )
         for (event in restoring) {
             h.send(event)

@@ -12,12 +12,23 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Per-subscription telephony call state only; requested after a parent explanation (FR-021). -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- Screen and sound dulling (FR-034, FR-036): granted by the parent in Android settings
+         after an explanation, and only when that effect is switched on. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Package visibility for VPN exclusions only (research R10). No QUERY_ALL_PACKAGES. -->
     <queries>
         <package android:name="com.whatsapp" />
         <intent>
             <action android:name="android.intent.action.DIAL" />
+        </intent>
+        <!-- Launcher apps, listed only on the parent screen for apps that skip Kids Garden (FR-038). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
         <intent>
             <action android:name="android.intent.action.SENDTO" />
@@ -36,7 +47,8 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:theme="@style/Theme.KidsGarden.Card">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

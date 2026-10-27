@@ -17,6 +17,15 @@ data class ReduceResult(
 object StateMachine {
 
     fun reduce(state: AuthorizationState, event: DomainEvent, time: TimeSnapshot): ReduceResult {
+        val result = if (state.mode == AuthorizationMode.DEACTIVATED) {
+            Activation.whileDeactivated(state, event)
+        } else {
+            reduceActive(state, event, time)
+        }
+        return withEffectPolicy(state, result)
+    }
+
+    private fun reduceActive(state: AuthorizationState, event: DomainEvent, time: TimeSnapshot): ReduceResult {
         val e = time.elapsedMillis
         // Invalidity is resolved before any other event can act on stale state.
         val grant = state.childGrant
@@ -25,49 +34,84 @@ object StateMachine {
         }
         // Time is settled first: a grant that reached a boundary while nothing was watching
         // (sleep, missed wake-up) changes mode or expires before the event is handled.
-        val settled = settleGrant(state, e)
+        val windowed = endGraceWindowIfDue(state, e)
+        val settled = settleGrant(windowed.state, e)
         val handled = handle(settled.state, event, time)
-        return ReduceResult(handled.state, settled.effects + handled.effects)
+        return ReduceResult(handled.state, windowed.effects + settled.effects + handled.effects)
+    }
+
+    /**
+     * Screen and sound effects follow the state (FR-034): emitted whenever the policy
+     * changes, or when the screen turns on or off while effects are on, so the platform can
+     * stop the cycle or restart it from none.
+     */
+    private fun withEffectPolicy(before: AuthorizationState, result: ReduceResult): ReduceResult {
+        val after = result.state
+        val policy = after.effectPolicy
+        val policyChanged = policy != before.effectPolicy
+        val screenChanged = policy is EffectPolicy.On && after.screenOn != before.screenOn
+        if (!policyChanged && !screenChanged) return result
+        return result.copy(effects = result.effects + Effect.ApplyEffectPolicy(policy, after.screenOn, after.generation))
     }
 
     private fun handle(state: AuthorizationState, event: DomainEvent, time: TimeSnapshot): ReduceResult {
         val e = time.elapsedMillis
         return when (event) {
-            DomainEvent.ProcessStarted,
+            is DomainEvent.ProcessStarted ->
+                if (event.savedActive) restart(state) else Activation.startDeactivated(state)
+
             DomainEvent.RebootObserved,
             DomainEvent.PackageReplaced -> restart(state)
+
+            is DomainEvent.DeactivateRequested -> Activation.requestDeactivate(state, event.confirmed)
+
+            is DomainEvent.ActiveWriteSucceeded ->
+                if (!event.active && state.pendingActive == false) Activation.enterDeactivated(state)
+                else unchanged(state.copy(pendingActive = null))
+
+            is DomainEvent.ActiveWriteFailed -> publish(state.copy(pendingActive = null))
+
+            // Already Active.
+            DomainEvent.ActivateRequested -> unchanged(state)
+
+            DomainEvent.ScreenOn -> unchanged(state.copy(screenOn = true))
+
+            is DomainEvent.EffectCapabilityChanged -> publish(state.copy(effectAccess = event.access))
+
+            is DomainEvent.MethodSwitchesChanged ->
+                settingsChanged(state, state.settings.copy(networkEnabled = event.networkEnabled, enabledEffects = event.effects))
 
             DomainEvent.SettingsInvalid -> revokeToDull(state.copy(settings = DomainSettings()))
 
             DomainEvent.PinVerified -> issueParentAccess(state)
 
-            DomainEvent.PinChanged -> revokeToDull(state)
+            // The parent stays in the interface (clarification 2026-10-27); grants still end.
+            DomainEvent.PinChanged -> if (state.mode == AuthorizationMode.DULL) unchanged(state) else expireToDull(state)
 
             // Grants end first; the parent stays in Settings to finish stopping the VPN.
             DomainEvent.VpnStopRequested ->
                 if (state.mode == AuthorizationMode.DULL) unchanged(state) else expireToDull(state)
-
-            DomainEvent.ParentUiLeft -> clearParentAccess(state)
 
             is DomainEvent.SettingsChanged -> settingsChanged(state, event.settings)
 
             is DomainEvent.CallCapabilityChanged -> callCapabilityChanged(state, event.capability, e)
 
             is DomainEvent.InteractivityObserved ->
-                if (event.interactiveAndUnlocked) unchanged(state.copy(interactiveAndUnlocked = true))
-                else screenOffOrLocked(state)
+                if (event.interactiveAndUnlocked) unchanged(state.copy(interactiveAndUnlocked = true, screenOn = true))
+                else screenOffOrLocked(state, e)
 
             is DomainEvent.StartParentRequested -> startParent(state, event.grantPermission)
 
             is DomainEvent.StartChildRequested -> startChild(state, event.grantPermission, event.durationMinutes, time)
 
-            DomainEvent.ScreenOff,
-            DomainEvent.DeviceLocked -> screenOffOrLocked(state)
+            DomainEvent.ScreenOff -> screenOffOrLocked(state.copy(screenOn = false), e)
 
-            DomainEvent.UserPresent -> userPresent(state)
+            DomainEvent.DeviceLocked -> screenOffOrLocked(state, e)
+
+            DomainEvent.UserPresent -> userPresent(state, time)
 
             DomainEvent.ManualParentExit ->
-                if (state.mode == AuthorizationMode.PARENT_MODE) revokeToDull(state) else unchanged(state)
+                if (state.mode == AuthorizationMode.PARENT_MODE) expireToDull(state) else unchanged(state)
 
             is DomainEvent.VpnCapabilityChanged -> vpnCapabilityChanged(state, event.capability)
 
@@ -90,8 +134,15 @@ object StateMachine {
         DullModePolicy.policyFor(state.copy(mode = AuthorizationMode.DULL, childGrant = null), 0L)
 
     /** Process start, reboot, or update: DULL with no grant or tokens (FR-027). */
-    private fun restart(state: AuthorizationState): ReduceResult {
-        val next = AuthorizationState.initial().copy(
+    internal fun restart(state: AuthorizationState): ReduceResult {
+        val next = freshState(state, AuthorizationMode.DULL)
+        return ReduceResult(next, dullEffects(next))
+    }
+
+    /** Empty memory-only state in [mode], keeping only live observations and settings. */
+    internal fun freshState(state: AuthorizationState, mode: AuthorizationMode): AuthorizationState =
+        AuthorizationState.initial().copy(
+            mode = mode,
             generation = state.generation + 1,
             nextTokenId = state.nextTokenId,
             settings = state.settings,
@@ -100,9 +151,11 @@ object StateMachine {
             callState = state.callState,
             callMonitorGeneration = state.callMonitorGeneration,
             interactiveAndUnlocked = state.interactiveAndUnlocked,
+            screenOn = state.screenOn,
+            effectAccess = state.effectAccess,
+            graceWindow = state.graceWindow,
+            graceWindowKnown = state.graceWindowKnown,
         )
-        return ReduceResult(next, dullEffects(next))
-    }
 
     /** Ends every grant and all parent access immediately. */
     internal fun revokeToDull(state: AuthorizationState): ReduceResult {
@@ -117,15 +170,18 @@ object StateMachine {
     }
 
     /**
-     * The grant ran out, or the parent ended it from Settings: discard it and return to DULL.
-     * Unlike a revocation, a parent in the parent interface stays there.
+     * The grant ran out, or the parent ended it from the app: discard it and return to DULL.
+     * Unlike a revocation, a parent in the parent interface stays there, with a fresh one-use
+     * permission for the next grant (clarification 2026-10-27).
      */
-    private fun expireToDull(state: AuthorizationState): ReduceResult {
-        val next = state.copy(
-            mode = AuthorizationMode.DULL,
-            childGrant = null,
-            rampStage = null,
-            generation = state.generation + 1,
+    internal fun expireToDull(state: AuthorizationState): ReduceResult {
+        val next = refreshPermission(
+            state.copy(
+                mode = AuthorizationMode.DULL,
+                childGrant = null,
+                rampStage = null,
+                generation = state.generation + 1,
+            ),
         )
         return ReduceResult(
             next,
@@ -137,7 +193,7 @@ object StateMachine {
         )
     }
 
-    private fun dullEffects(state: AuthorizationState): List<Effect> = listOf(
+    internal fun dullEffects(state: AuthorizationState): List<Effect> = listOf(
         Effect.CancelBoundary(state.generation),
         Effect.ClearParentUiAccess(state.generation),
         Effect.ApplyNetworkPolicy(dullPolicy(state), state.generation),
@@ -152,7 +208,7 @@ object StateMachine {
         if (capability == state.vpnCapability) return unchanged(state)
         val next = state.copy(vpnCapability = capability)
         if (capability != VpnCapability.RUNNING && state.mode != AuthorizationMode.DULL) {
-            return revokeToDull(next)
+            return expireToDull(next)
         }
         if (next.mode != AuthorizationMode.DULL) return publish(next)
         return ReduceResult(
@@ -189,13 +245,15 @@ object StateMachine {
         val eligible = access.grantPermission == permission &&
             state.interactiveAndUnlocked &&
             state.setupComplete &&
-            state.vpnCapability == VpnCapability.RUNNING
+            state.dullingCapable
         if (!eligible) return unchanged(state)
         val next = state.copy(
             mode = AuthorizationMode.PARENT_MODE,
             childGrant = null,
             rampStage = null,
             parentAccess = access.copy(grantPermission = null),
+            graceWindow = null,
+            graceWindowKnown = true,
             generation = state.generation + 1,
         )
         return ReduceResult(
@@ -203,26 +261,127 @@ object StateMachine {
             listOf(
                 Effect.CancelBoundary(next.generation),
                 Effect.ApplyNetworkPolicy(NetworkPolicy.Normal, next.generation),
+                // Starting Parent Mode resets the unlock grace (clarification 2026-10-27).
+                Effect.PersistUnlockGraceStart(null, next.generation),
                 Effect.PublishParentStatus(next.generation),
             ),
         )
     }
 
     /**
-     * Screen off or lock: Parent Mode ends, and parent-interface access always clears.
-     * Because events are serialized, a lock processed before a start makes that start fail.
+     * Screen off or lock: Parent Mode ends, a running unlock grace pauses (its unused budget is
+     * banked in the window), and parent-interface access always clears. Because events are
+     * serialized, a lock processed before a start makes that start fail.
      */
-    private fun screenOffOrLocked(state: AuthorizationState): ReduceResult {
+    private fun screenOffOrLocked(state: AuthorizationState, e: Long): ReduceResult {
         val locked = state.copy(interactiveAndUnlocked = false)
         if (locked.mode == AuthorizationMode.PARENT_MODE) return revokeToDull(locked)
+        val grant = locked.childGrant
+        if (grant != null && grant.unlockGrace) {
+            val left = grant.remainingMillis(e) ?: 0L
+            val window = locked.graceWindow?.copy(remainingMillis = left)
+            return revokeToDull(locked.copy(graceWindow = window))
+        }
         return clearParentAccess(locked)
     }
 
     /** Unlock never restores Parent Mode; a surviving Parent Mode grant is revoked defensively. */
-    private fun userPresent(state: AuthorizationState): ReduceResult {
-        val unlocked = state.copy(interactiveAndUnlocked = true)
+    private fun userPresent(state: AuthorizationState, time: TimeSnapshot): ReduceResult {
+        val unlocked = state.copy(interactiveAndUnlocked = true, screenOn = true)
         if (unlocked.mode == AuthorizationMode.PARENT_MODE) return revokeToDull(unlocked)
-        return unchanged(unlocked)
+        return startUnlockGrace(unlocked, time) ?: unchanged(unlocked)
+    }
+
+    /**
+     * Unlock grace (FR-037, clarification 2026-10-27): an unlock in DULL with the feature on,
+     * setup complete and some dulling method working uses the grace window. No open window →
+     * open one now, fixed for the rest time, with a full budget (grace + fade). Budget left →
+     * continue it as an in-memory grant at the same point of its fade. No budget → stay DULL.
+     * Null when nothing starts.
+     */
+    private fun startUnlockGrace(state: AuthorizationState, time: TimeSnapshot): ReduceResult? {
+        val settings = state.settings
+        if (state.mode != AuthorizationMode.DULL || !settings.unlockGraceEnabled) return null
+        if (!state.setupComplete || !state.dullingCapable) return null
+        val e = time.elapsedMillis
+        val graceMillis = settings.unlockGraceSeconds * MILLIS_PER_SECOND
+        val fadeMillis = settings.unlockGraceFadeSeconds * MILLIS_PER_SECOND
+        val budget = graceMillis + fadeMillis
+        val restMillis = settings.unlockGraceRestSeconds * MILLIS_PER_SECOND
+        val current = currentGraceWindow(state, time)
+        val opening = current == null
+        val window = current ?: GraceWindow(time.epochMillis, e + restMillis, budget)
+        val opened = state.copy(graceWindow = window, graceWindowKnown = true)
+        val persist = if (opening) Effect.PersistUnlockGraceStart(window.startEpochMillis, opened.generation) else null
+        val left = window.remainingMillis.coerceAtMost(budget)
+        if (left <= 0L || fadeMillis <= 0L || graceMillis <= 0L) {
+            return ReduceResult(opened, listOfNotNull(persist, Effect.PublishParentStatus(opened.generation)))
+        }
+        // Continue the same budget: start the grant as if (budget - left) were already used,
+        // so a pause in the middle of the fade resumes at that stage instead of replaying it.
+        val used = budget - left
+        val grant = ChildGrant(
+            durationMillis = budget,
+            rampMillis = fadeMillis,
+            startElapsedMillis = e - used,
+            startEpochMillis = time.epochMillis - used,
+            target = settings.dullIntensity,
+            pauseStartElapsedMillis = if (state.callState == CallSourceState.ACTIVE) e else null,
+            unlockGrace = true,
+        )
+        val mode = grant.modeAt(e) ?: return null
+        val next = opened.copy(
+            mode = mode,
+            childGrant = grant,
+            rampStage = if (mode == AuthorizationMode.SOFT_LANDING) grant.rampStageAt(e) else null,
+            graceWindow = window.copy(remainingMillis = 0L),
+            generation = state.generation + 1,
+        )
+        return ReduceResult(
+            next,
+            listOfNotNull(
+                grantPolicyEffect(next, e),
+                boundaryEffect(next, e),
+                if (opening) Effect.PersistUnlockGraceStart(window.startEpochMillis, next.generation) else null,
+                Effect.PublishParentStatus(next.generation),
+            ),
+        )
+    }
+
+    /**
+     * The open grace window at [time], or null when none is open. Uses this process's own
+     * window once it has one (or cleared one); otherwise the saved start time.
+     */
+    internal fun currentGraceWindow(state: AuthorizationState, time: TimeSnapshot): GraceWindow? {
+        val restMillis = state.settings.unlockGraceRestSeconds * MILLIS_PER_SECOND
+        val window = if (state.graceWindowKnown) {
+            state.graceWindow
+        } else {
+            UnlockGrace.windowFromSaved(state.settings.lastUnlockGraceEpochMillis, time.epochMillis, time.elapsedMillis, restMillis)
+        }
+        return window?.takeUnless { it.endedAt(time.elapsedMillis) }
+    }
+
+    /**
+     * The grace window ended (FR-037): unused grace is lost. A grace still in its normal part
+     * goes straight into its fade, so nothing changes abruptly; one already fading finishes.
+     */
+    private fun endGraceWindowIfDue(state: AuthorizationState, e: Long): ReduceResult {
+        val window = state.graceWindow ?: return unchanged(state)
+        if (!window.endedAt(e)) return unchanged(state)
+        val ended = state.copy(graceWindow = null, graceWindowKnown = true)
+        val grant = ended.childGrant
+        if (grant == null || !grant.unlockGrace) return unchanged(ended)
+        if (grant.isPaused) return expireToDull(ended)
+        val c = grant.consumedMillis(e) ?: return revokeToDull(ended)
+        val fadeStart = grant.durationMillis - grant.rampMillis
+        if (c >= fadeStart) return unchanged(ended)
+        val fading = grant.copy(startElapsedMillis = e - fadeStart, completedPauseMillis = 0L)
+        val next = ended.copy(childGrant = fading, mode = AuthorizationMode.SOFT_LANDING, rampStage = 0)
+        return ReduceResult(
+            next,
+            listOfNotNull(grantPolicyEffect(next, e), boundaryEffect(next, e), Effect.PublishParentStatus(next.generation)),
+        )
     }
 
     /**
@@ -231,9 +390,22 @@ object StateMachine {
      * one-use permission lets the parent hand the phone to a child from there.
      */
     private fun uiOpened(state: AuthorizationState): ReduceResult {
+        if (state.parentAccess != null) {
+            // Access survives leaving the app (clarification 2026-10-27); re-arm the permission
+            // used up by the last grant, unless a child grant is running.
+            val refreshed = refreshPermission(state)
+            return if (refreshed == state) unchanged(state) else publish(refreshed)
+        }
         val inParentMode = state.mode == AuthorizationMode.PARENT_MODE && state.interactiveAndUnlocked
-        if (!inParentMode || state.parentAccess?.grantPermission != null) return unchanged(state)
+        if (!inParentMode) return unchanged(state)
         return issueParentAccess(state)
+    }
+
+    /** Gives held parent access a new one-use grant permission when it has none. */
+    internal fun refreshPermission(state: AuthorizationState): AuthorizationState {
+        val access = state.parentAccess ?: return state
+        if (access.grantPermission != null) return state
+        return state.copy(parentAccess = access.copy(grantPermission = state.nextTokenId), nextTokenId = state.nextTokenId + 1)
     }
 
     /**
@@ -248,7 +420,7 @@ object StateMachine {
             access.grantPermission == permission &&
             state.interactiveAndUnlocked &&
             state.setupComplete &&
-            state.vpnCapability == VpnCapability.RUNNING
+            state.dullingCapable
         if (!eligible) return unchanged(state)
         val e = time.elapsedMillis
         val grant = ChildGrant(
@@ -304,7 +476,14 @@ object StateMachine {
 
     /** The grant's policy, valid only until its next boundary. */
     private fun grantPolicyEffect(state: AuthorizationState, e: Long): Effect =
-        Effect.ApplyNetworkPolicy(grantPolicy(state, e), state.generation, state.childGrant?.nextBoundaryElapsed(e))
+        Effect.ApplyNetworkPolicy(grantPolicy(state, e), state.generation, nextBoundary(state, e))
+
+    /** The grant's next boundary, or the grace window end if that comes first. */
+    private fun nextBoundary(state: AuthorizationState, e: Long): Long? {
+        val grantNext = state.childGrant?.nextBoundaryElapsed(e) ?: return null
+        val windowEnd = state.graceWindow?.endElapsedMillis?.takeIf { state.childGrant?.unlockGrace == true && it > e }
+        return if (windowEnd != null) minOf(grantNext, windowEnd) else grantNext
+    }
 
     /**
      * While paused the current policy is kept, valid until the mandatory checkpoint plus a
@@ -324,7 +503,7 @@ object StateMachine {
     }
 
     private fun boundaryEffect(state: AuthorizationState, e: Long): Effect? =
-        state.childGrant?.nextBoundaryElapsed(e)?.let { Effect.ScheduleBoundary(it, state.generation) }
+        nextBoundary(state, e)?.let { Effect.ScheduleBoundary(it, state.generation) }
 
     /**
      * A scheduled boundary fired. Mode changes were already settled. While paused this is
@@ -385,12 +564,12 @@ object StateMachine {
     }
 
     /** A correct PIN opens the parent interface only; phone authorization is unchanged. */
-    private fun issueParentAccess(state: AuthorizationState): ReduceResult {
+    internal fun issueParentAccess(state: AuthorizationState): ReduceResult {
         val access = ParentAccess(token = state.nextTokenId, grantPermission = state.nextTokenId + 1)
         return publish(state.copy(parentAccess = access, nextTokenId = state.nextTokenId + 2))
     }
 
-    private fun clearParentAccess(state: AuthorizationState): ReduceResult {
+    internal fun clearParentAccess(state: AuthorizationState): ReduceResult {
         if (state.parentAccess == null) return unchanged(state)
         val next = state.copy(parentAccess = null)
         return ReduceResult(
@@ -399,12 +578,13 @@ object StateMachine {
         )
     }
 
-    private fun publish(state: AuthorizationState): ReduceResult =
+    internal fun publish(state: AuthorizationState): ReduceResult =
         ReduceResult(state, listOf(Effect.PublishParentStatus(state.generation)))
 
-    private fun unchanged(state: AuthorizationState): ReduceResult = ReduceResult(state, emptyList())
+    internal fun unchanged(state: AuthorizationState): ReduceResult = ReduceResult(state, emptyList())
 
     const val REASON_VPN_UNAVAILABLE = "vpn-unavailable"
+    const val REASON_DEACTIVATED = "deactivated"
 
     /** The only durations a parent can give (FR-009). */
     val CHILD_DURATIONS_MINUTES: Set<Int> = (10..120 step 10).toSet()

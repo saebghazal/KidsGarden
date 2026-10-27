@@ -24,10 +24,13 @@ Android components translate platform observations into domain events. They do n
 | ACCESS_NETWORK_STATE | React to network handover and connection status |
 | FOREGROUND_SERVICE and FOREGROUND_SERVICE_SYSTEM_EXEMPTED | Configured VPN foreground operation only when platform eligibility holds |
 | POST_NOTIFICATIONS | Parent explanation screen first, then request for neutral foreground notification; respect denial and platform-required visibility |
-| RECEIVE_BOOT_COMPLETED | Reconcile DULL on permitted post-boot execution; no pre-unlock protection claim |
+| SYSTEM_ALERT_WINDOW | Grey screen overlay only, after a parent explanation, when the parent enables it; `Settings.canDrawOverlays` checked live |
+| WRITE_SETTINGS | Brightness effect only, after a parent explanation, when the parent enables it; `Settings.System.canWrite` checked live |
+| RECEIVE_BOOT_COMPLETED | Reconcile DULL on permitted post-boot execution (or stay DEACTIVATED and skip VPN start when saved `active = false`); no pre-unlock protection claim |
 | BIND_VPN_SERVICE | Service declaration restricted to Android; not a runtime parent permission |
 | READ_PHONE_STATE | Parent explanation screen first, then runtime request for per-subscription telephony call state. Denial/revocation continues countdown and shows only the parent call limitation. |
-| `<queries>` | `<package android:name="com.whatsapp"/>` plus intent queries for `ACTION_DIAL` and `ACTION_SENDTO` with `smsto:` so exclusion packages are visible; no QUERY_ALL_PACKAGES |
+| `<queries>` | `<package android:name="com.whatsapp"/>` plus intent queries for `ACTION_DIAL` and `ACTION_SENDTO` with `smsto:` so exclusion packages are visible, and a `MAIN`/`LAUNCHER` intent query so the parent screen for apps that skip Kids Garden (FR-038) can list launcher apps while it is open; no QUERY_ALL_PACKAGES |
+| USER_PRESENT receiver | Runtime-registered and exported, because some phones (Samsung) send it from System UI rather than the system process; it is a protected broadcast, so no app can fake an unlock (T135) |
 | Activity launch | Launcher exported as needed; no externally trusted grant extras |
 | Boot/update receiver | Manifest system-action receiver with minimal protected filters and bounded work |
 | Screen/user-present receiver | Runtime registration for protected system actions; registration flags chosen/tested for actual system sender |
@@ -49,7 +52,8 @@ Use [CallStateMonitor](call-state-monitor.md) without content/notification inspe
 3. Prepare safe engine resources before capturing traffic. If forwarding cannot be made operational, close/release rather than blackhole networking.
 4. Apply shaping when VPN/forwarding capability is qualified. Configure dialer, default SMS/RCS and com.whatsapp exclusions where possible; call detection availability is not a VPN startup or shaping prerequisite.
 5. On consent revoke, second VPN, user stop, service/process failure: invalidate authorization; close TUN/relay sockets/buffers; stop the foreground service where required. Avoid restart loops.
-6. On boot/update or owning-process recreation: clear all grants, then recover only through allowed platform entry points. Never grant Normal based on disk.
+6. On boot/update or owning-process recreation: clear all grants, then recover only through allowed platform entry points. Never grant Normal based on disk. If valid saved settings say `active = false`, do not start the VPN or foreground service.
+7. On Deactivate: stop shaping, close TUN/relay sockets/buffers and stop the foreground service; no VPN notification remains. On Activate: start through the normal visible-parent consent path.
 7. Initial supported setup does not depend on always-on VPN or lockdown. Explicitly opt out of unsupported always-on behavior.
 8. Normal/child/call/ramp policy changes should update an existing healthy engine without tearing down flows. No network reset per stage.
 
@@ -81,6 +85,6 @@ Call pause retains the pre-pause next play/ramp/expiry boundary as a mandatory o
 
 Separate proofs are required for authorization intent, actual applied forwarding policy, and physical call behavior. A mock VpnState.RUNNING, granted consent, system key icon or live notification proves none of the shaping/profile/call guarantees alone.
 
-Physical qualification includes both OS versions; Wi-Fi/cellular; dual stack; TCP/UDP/QUIC; simultaneous flows; mobile/Telecom calls on single and dual SIM; WhatsApp and game voice calls produce no pause; unavailable detection/permission; overlapping observations; locked child calls; parent screen-off; revoke/stop/restart/boot; excluded-app (dialer, SMS/RCS, WhatsApp) versus non-excluded traffic; default SMS app change applied at next establish; 4 KB/16 KB native packaging; no application output in error paths.
+Physical qualification includes both OS versions; Wi-Fi/cellular; dual stack; TCP/UDP/QUIC; simultaneous flows; mobile/Telecom calls on single and dual SIM; WhatsApp and game voice calls produce no pause; unavailable detection/permission; overlapping observations; locked child calls; parent screen-off; revoke/stop/restart/boot; compatibility check outcomes (other VPN, work profile policy, FGS denied); background stop detected after OEM battery kill; Deactivate stops the VPN and it stays off across reboot; Activate restores DULL; excluded-app (dialer, SMS/RCS, WhatsApp) versus non-excluded traffic; default SMS app change applied at next establish; 4 KB/16 KB native packaging; no application output in error paths.
 
 Keep all source/license hashes, synthetic measurement reports and gate results in development artifacts, never the installed settings document.

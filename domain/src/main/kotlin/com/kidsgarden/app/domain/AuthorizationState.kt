@@ -31,19 +31,49 @@ data class AuthorizationState(
     /** Latest call-monitor generation seen; older observations are stale. */
     val callMonitorGeneration: Long = Long.MIN_VALUE,
     val interactiveAndUnlocked: Boolean = false,
+    /** Screen is on; the effect cycle runs only then (FR-035). */
+    val screenOn: Boolean = false,
+    /** Live per-effect access; missing entries count as unavailable. */
+    val effectAccess: Map<ScreenEffect, EffectAccess> = emptyMap(),
+    /** The `active` value being saved for a requested Activate or Deactivate; null when none. */
+    val pendingActive: Boolean? = null,
+    /** The current unlock-grace window in this process, if any (FR-037). */
+    val graceWindow: GraceWindow? = null,
+    /**
+     * True once this process opened or cleared a window itself; from then on the saved start
+     * time is not consulted, so a late settings echo cannot bring back a cleared window.
+     */
+    val graceWindowKnown: Boolean = false,
 ) {
     /** True when setup and live capability allow new grants (Assumptions; FR-019). */
     val setupComplete: Boolean
         get() = settings.credentialPresent && settings.onboardingComplete
 
+    /** Enabled effects whose Android access works now. */
+    val workingEffects: Set<ScreenEffect>
+        get() = settings.enabledEffects.filterTo(mutableSetOf()) { effectAccess[it] == EffectAccess.WORKING }
+
+    /** Some dulling method works: the VPN forwards or an enabled effect has access (FR-032). */
+    val dullingCapable: Boolean
+        get() = vpnCapability == VpnCapability.RUNNING || workingEffects.isNotEmpty()
+
+    /** Effects run only in DULL (so only while Active) and never during a phone call (FR-034). */
+    val effectPolicy: EffectPolicy
+        get() {
+            val effects = workingEffects
+            val on = mode == AuthorizationMode.DULL && callState != CallSourceState.ACTIVE && effects.isNotEmpty()
+            return if (on) EffectPolicy.On(effects, settings.dullIntensity) else EffectPolicy.Off
+        }
+
     val displayMode: DisplayMode
         get() = when (mode) {
             AuthorizationMode.DULL ->
-                if (setupComplete && vpnCapability == VpnCapability.RUNNING) DisplayMode.DULL
+                if (setupComplete && dullingCapable) DisplayMode.DULL
                 else DisplayMode.SETUP_REQUIRED
             AuthorizationMode.PARENT_MODE -> DisplayMode.PARENT_MODE
             AuthorizationMode.CHILD_PLAY_SESSION -> DisplayMode.CHILD_PLAY_SESSION
             AuthorizationMode.SOFT_LANDING -> DisplayMode.SOFT_LANDING
+            AuthorizationMode.DEACTIVATED -> DisplayMode.DEACTIVATED
         }
 
     companion object {

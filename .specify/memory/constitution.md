@@ -1,31 +1,53 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 1.0.0 → 2.0.0
-Bump rationale: MAJOR redefinition of timed-only enjoyable use to recognize two explicit
-authorizations: untimed Parent Mode and timed Child Play Session. Also remove the debug-log
-allowance to match the approved V1 no-logs rule. Dull-by-default and privacy remain mandatory.
+Version change: 4.0.0 → 5.0.0 (2026-10-27)
+Bump rationale: MAJOR, Principle I rules redefined (owner clarification 2026-10-27).
+- Parent-interface access, once opened with the PIN, lasts until the phone locks, the screen
+  turns off, the phone is given to a child, or the process restarts. Leaving the app no longer
+  ends it, and each new grant no longer needs a second PIN entry while it lasts.
+- Deactivate needs parent-interface access and the parent's explicit switch action; the separate
+  confirmation dialog is gone (owner change 2026-10-19).
+- Unlock grace is a fixed window from the first unlock: the grace pauses while the phone is
+  locked, unused grace is lost when the window ends, and turning Kids Garden off and on or
+  starting Parent Mode resets it.
+- New: a parent-only list of apps that skip Kids Garden (they bypass the VPN entirely). No
+  VPN-off control is added. Launcher apps are listed only on that parent screen.
+Modified principles: I (access, Deactivate, Unlock grace, app bypass), III (what is stored).
+Other sections: V1 scope (in), review checklist.
+
+Previous amendment (3.1.1 → 4.0.0, 2026-10-25):
+Bump rationale: MAJOR, a principle rule is redefined. Principle I said an unlock alone never
+grants normal use. The owner added Unlock grace (spec FR-037): when the parent has it on, an
+unlock with no grant gives a short grace that fades into Dull Mode, at most once per rest
+period. The rest-period start time is the one persisted value about use. Principle III and VI
+wording now allow that single timestamp. Default on, set by the owner.
+
+Previous amendment (3.1.0 → 3.1.1, 2026-10-18):
+Bump rationale: PATCH, wording only. Principles I, III and VI said V1 stores "session state";
+the spec (FR-013, FR-027) keeps sessions in memory only. Wording now says V1 persists parent
+settings plus the saved brightness restore value (FR-034) and nothing about sessions. No rule
+changed. Found by /speckit-analyze on 2026-10-18 (finding C1).
+
+Previous amendment (3.0.0 → 3.1.0, 2026-10-18):
+Bump rationale: MINOR, materially expanded guidance. Dull Mode may now also use gentle,
+parent-configured screen and sound effects (grey tint, lower media volume, lower brightness)
+that fade in and out in cycles, alongside or instead of VPN network dulling (spec FR-034–036,
+clarification 2026-10-18). No principle removed or redefined.
 
 Modified principles (titles unchanged):
-- I. Unauthorized = Dull Phone (Fail-Safe Default): two authorization forms, explicit PIN/action,
-  parent revocation, child timer/call-pause invariants, and safe restart behavior.
-- II. No Confrontation, Gradual Transitions: distinguish normal child expiry from immediate
-  authorization revocation; preserve quiet, non-confrontational behavior.
-- III. Privacy by Absence: prohibit app-created logs in both debug and release V1.
-- IV. Central, Testable State Machine: include both authorization forms and scoped call pauses.
-- V. Honest Android Platform Compliance: make best-effort dulling and scoped call limits explicit.
+- II. No Confrontation, Gradual Transitions: Dull Mode methods expanded; effects must be gradual,
+  touch-transparent, never lock or hide apps, and never touch call/alarm audio.
+- V. Honest Android Platform Compliance: overlay and system-settings access named among the
+  special accesses that need a prior parent explanation.
 Other amended sections:
-- Technical Constraints and V1 Scope: list Parent Mode and Child Play Session separately.
-- Development Workflow and Quality Gates: explicit authorization/timer tests and no-log review.
+- Technical Constraints and V1 Scope: screen and sound dulling added to V1 scope (in).
 Added sections: none
 Removed sections: none
 
-Template resolution: constitution-template resolved successfully through the shared resolver.
-Existing seven-principle structure and heading hierarchy retained; template sources unchanged.
 Write scope: .specify/memory/constitution.md only.
-Dependent templates and commands read the constitution at runtime and are not modified here.
-Follow-up completed: feature spec/plan references were synchronized to constitution v2.0.0 while
-remediating the remaining analysis findings; approved product scope is unchanged.
+Follow-up: plan.md, tasks.md, data-model.md and contracts still need FR-032–036.
+Previous amendment (2.0.0 → 3.0.0, 2026-10-15): Active/Deactivated switch in Principle I.
 
 Deferred placeholder TODOs: none.
 This report is temporary amendment-review material; remove it before committing the constitution
@@ -38,11 +60,37 @@ after the existing maintainer review requirement is satisfied.
 
 ### I. Unauthorized = Dull Phone (Fail-Safe Default)
 
-- Dull Mode MUST be the default. No active, valid Kids Garden authorization MUST mean Dull Mode.
-  A normal device unlock, app launch, or successful PIN entry alone MUST NOT grant normal use.
+- Dull Mode MUST be the default while Kids Garden is Active. While Active, no valid Kids Garden
+  authorization MUST mean Dull Mode. A normal device unlock, app launch, or successful PIN entry
+  alone MUST NOT grant normal use, except the parent-configured Unlock grace below.
+- Unlock grace (v4.0.0, revised v5.0.0): while Kids Garden is Active and the parent has it
+  switched on, the first unlock from Dull Mode opens a grace window of parent-set length. The
+  window holds one short, parent-set grace that fades gradually into Dull Mode. The grace runs
+  only while the phone is unlocked: locking pauses it and the next unlock in the window continues
+  it. Unused grace is lost when the window ends; the next unlock after that opens a new window.
+  Turning Kids Garden off and on, and starting Parent Mode, reset the window. The grace is never
+  shown to the child as a message, never applies during Parent Mode, play time or Deactivated,
+  and never survives a restart as a grant. Only the window start time is saved, so a restart
+  cannot open a new window early.
+- Apps that skip Kids Garden (v5.0.0): the parent MAY choose, behind the PIN, apps that bypass
+  the VPN entirely and are therefore never slowed. This is a parent setting, never a grant and
+  never set by the child. There is no control that turns the VPN off for everything; turning
+  Kids Garden off is the Deactivate switch, which MUST fully stop the VPN.
+- The parent MAY turn Kids Garden off with an Active/Deactivated switch. Deactivating MUST require
+  parent-interface access obtained with the Kids Garden PIN and the parent's explicit switch
+  action; it ends every grant, fully stops the VPN and stops dulling until the parent activates
+  again. Activating MUST require parent-interface access obtained with the PIN and returns the
+  phone to Dull Mode without creating a grant. The choice is a saved parent
+  setting and persists across restart, update, and reboot. Nothing other than an authenticated
+  parent action MAY deactivate Kids Garden: missing, corrupt, or unmigratable settings, errors,
+  restarts, and child actions MUST resolve to Active and Dull Mode.
 - Enjoyable use MUST be allowed only through one of two explicit Kids Garden authorizations:
   untimed Parent Mode for the parent or a timed Child Play Session for the child. Each new grant
-  MUST require the Kids Garden PIN followed by the corresponding explicit parent action.
+  MUST require parent-interface access obtained with the Kids Garden PIN, followed by the
+  corresponding explicit parent action.
+- Parent-interface access (v5.0.0) lasts from a correct PIN entry until the phone locks, the
+  screen turns off, the parent gives the phone to a child, or the app process restarts. Leaving
+  and reopening the app in between MUST NOT ask for the PIN again; there is no idle timeout.
 - Parent Mode MUST begin only after the parent enters the Kids Garden PIN and chooses
   “Use phone as parent.” It MUST provide normal or near-normal phone use with no time limit.
 - Parent Mode MUST end when the phone locks, the screen turns off, the parent exits, app state
@@ -51,17 +99,18 @@ after the existing maintainer review requirement is satisfied.
   starts a new authorization. Unlock alone MUST NOT restore Parent Mode.
 - A Child Play Session MUST begin only after the parent enters the Kids Garden PIN, chooses
   “Give phone to child,” and selects a limited duration. The session MUST have a timer.
-- Lock/unlock MUST NOT reset, pause, extend, or bypass the child timer. A scoped detectable-call
-  pause is the only automatic pause: normal mobile/Telecom calls where Android APIs permit and
-  best-effort WhatsApp calls pause the timer only while a supported active call is detectable.
-  Unsupported or undetectable calls MUST leave countdown running. A call pause MUST preserve the
+- Lock/unlock MUST NOT reset, pause, extend, or bypass the timer of a parent-given Child Play
+  Session (Unlock grace, which is not a parent grant, follows its own rule above). A scoped detectable-call
+  pause is the only automatic pause: normal mobile/Telecom calls where Android APIs permit pause
+  the timer only while a supported active call is detectable. WhatsApp and other third-party app
+  calls, and unsupported or undetectable calls, MUST leave countdown running. A call pause MUST preserve the
   remaining time without duplicate credit; when no supported active call remains detectable,
   countdown MUST resume from that remainder. Lock/unlock alone MUST NOT alter a valid call pause.
 - Near normal child-session expiry, Soft Landing MUST begin. At expiry, after accounting for
   validated pauses, the phone MUST return to Dull Mode. Calls MUST NOT revive expired or revoked
   authorizations or create an unlimited-play loophole. A new grant requires a new PIN/action.
 - The app MUST fail safe into Dull Mode when settings are missing, unreadable, corrupt, from an
-  unknown schema version that cannot be migrated, or when the stored session state is invalid or
+  unknown schema version that cannot be migrated, or when the in-memory session state is invalid or
   cannot be validated (for example, an inconsistent deadline or clock).
 - Process death, app updates, and device reboots MUST NOT extend, restore, or create authorization.
   V1 MUST discard all active grants and current child-session timestamps on owning-process
@@ -85,9 +134,14 @@ something the child keeps by default or regains through errors.
   MUST use calm, neutral wording and MUST NOT address or scold the child.
 - Problems (missing permission, VPN failure, throttling not active) MUST be explained only in the
   PIN-protected parent interface, never surfaced to the child as a confrontation.
-- Dull Mode MUST make entertainment less attractive, mainly by reducing internet responsiveness and
-  bandwidth through a local VPN-style approach. It MUST NOT lock the device or prevent use of
-  essential functions such as phone calls and emergency services.
+- Dull Mode MUST make entertainment less attractive by reducing internet responsiveness and
+  bandwidth through a local VPN-style approach and/or by parent-configured screen and sound
+  effects (a see-through grey tint, lower media volume, lower brightness). It MUST NOT lock the
+  device or prevent use of essential functions such as phone calls and emergency services.
+- Screen and sound effects MUST be gradual (fading in and out, never switching on at once), let
+  every touch pass through, never hide, block, or target specific apps or content, never show
+  text to the child, and never change call, ringtone, alarm, or accessibility audio. They stop
+  during detectable phone calls and outside Dull Mode, and restore the parent's settings.
 
 Rationale: confrontation between a child and software creates conflict, workarounds, and distrust;
 a dull phone that quietly stays dull avoids all three.
@@ -100,8 +154,11 @@ a dull phone that quietly stays dull avoids all three.
 - Network handling in the local VPN MUST be limited to shaping rate and latency. It MUST NOT
   inspect application-layer payloads, and it MUST NOT persist any record of traffic, destinations,
   or apps used.
-- V1 persists only (a) parent settings and (b) the current session state. Activity logs, history,
-  and usage reports are prohibited in V1.
+- V1 persists only (a) parent settings and (b) the parent's previous screen brightness while a
+  brightness effect is applied, so it can be restored, and (c) the start time of the current Unlock
+  grace window (v4.0.0, revised v5.0.0), a single overwritten timestamp so a restart cannot open
+  a new window early; it is cleared when the window is reset. Session
+  and authorization state are kept in memory only. Activity logs, history, and usage reports are prohibited in V1.
 - V1 MUST NOT create logs in debug or release builds, including Logcat diagnostics, crash logs,
   PIN-attempt logs, network logs, call logs, or activity logs. Debug builds MUST NOT weaken this
   rule. External test tooling may retain synthetic test results outside the installed product;
@@ -115,8 +172,8 @@ leak what it never collected.
 
 ### IV. Central, Testable State Machine
 
-- Authorization behavior (Dull → Parent Mode → Dull and Dull → Child Play Session → Soft Landing
-  → Dull), including scoped call pauses and revocation, MUST be modeled as one explicit state
+- Authorization behavior (Dull → Parent Mode → Dull, Dull → Child Play Session → Soft Landing
+  → Dull, and Active ⇄ Deactivated), including scoped call pauses and revocation, MUST be modeled as one explicit state
   machine in the domain layer, written in pure Kotlin with no Android framework dependencies.
 - Time MUST be injected (for example, through a clock abstraction) so that expiry, Soft Landing
   steps, and invalid-clock handling can be unit tested deterministically.
@@ -136,7 +193,8 @@ keeps the fail-safe guarantees in Principle I enforceable.
 - Background behavior MUST be event and rule driven (system alarms, scheduled work, boot and package
   broadcasts, VPN lifecycle callbacks). Continuous polling, AI, and screen analysis are prohibited.
 - Every sensitive permission or special access (VPN consent, notification permission, battery
-  optimization exemption, exact alarms, and similar) MUST have a clear, plain-language,
+  optimization exemption, exact alarms, display over other apps, modify system settings, and
+  similar) MUST have a clear, plain-language,
   parent-facing explanation shown before the system prompt.
 - V1 is a normal installed app. It MUST NOT claim or advertise uninstall prevention, tamper-proofing,
   or protection it cannot reliably enforce. The parent interface MUST honestly describe V1 limits.
@@ -152,7 +210,7 @@ Overpromising protection misleads parents.
 
 - No backend, remote server, cloud sync, or account system. Authentication is the local Parent PIN
   only.
-- No database. Settings and session state are stored with Jetpack DataStore using a JSON serializer
+- No database. Settings (including the brightness restore value, the current Unlock grace window start and the apps that skip Kids Garden) are stored with Jetpack DataStore using a JSON serializer
   (kotlinx.serialization), accessed only through a settings repository in the data layer.
 - No analytics, crash-reporting SDKs that transmit data, advertising SDKs, or tracking of any kind.
 - The app is entirely free: no in-app purchases, subscriptions, or ads.
@@ -199,8 +257,15 @@ the device's battery.
   screen off, parent exit, invalid state, or owning-process restart.
 - Explicit PIN-authorized “Give phone to child” for a timed Child Play Session of a selected
   duration, with scoped detectable-call pauses and no lock/unlock timer bypass.
-- Dull Mode without valid authorization; Soft Landing near normal child expiry, then Dull Mode.
+- Dull Mode without valid authorization while Active; Soft Landing near normal child expiry, then
+  Dull Mode.
+- PIN-protected Active/Deactivated switch; Deactivated stops dulling and the VPN and persists
+  until the parent activates again.
+- Parent-configured Unlock grace with a fixed window (v4.0.0, revised v5.0.0).
+- Parent-only list of apps that skip Kids Garden by bypassing the VPN (v5.0.0).
 - Local VPN-based throttling of internet responsiveness and bandwidth.
+- Optional, gradual screen and sound dulling (grey tint, lower media volume, lower brightness)
+  configured by the parent, usable with or without the VPN.
 - Parent-only status screen that reports permission or VPN problems.
 
 **V1 scope (out)**
@@ -221,13 +286,15 @@ the device's battery.
 - Every feature MUST be testable and ship with tests:
   - Unit tests for all state machine states, transitions, and fail-safe rules (mandatory).
   - Unit tests for both explicit authorization forms, Parent Mode revocation, child lock/unlock
-    invariance, scoped call pause/resume, unsupported-call countdown, and restart invalidation.
+    invariance, scoped call pause/resume, unsupported-call countdown, restart invalidation, and
+    the Active/Deactivated switch (deactivate from every state, persistence, safe-default Active).
   - Unit tests for settings serialization, defaults, corruption handling, and every schema
     migration.
   - Instrumented or manual test steps for platform behavior that cannot be unit tested (VPN
     consent, reboot recovery, foreground service behavior), recorded in the feature's tasks.
 - Review checklist for every change (human or AI-authored):
-  - Does any path leave the device unrestricted without parent authorization? (Principle I)
+  - Does any path leave the device unrestricted without parent authorization or an authenticated,
+    confirmed Deactivate? Can anything other than the parent deactivate? (Principle I)
   - Does any child-facing text or UI confront the child? (Principle II)
   - Is any private content read, stored, logged, or transmitted? (Principle III)
   - Does either a debug or release path create app logs? (Principle III)
@@ -254,4 +321,4 @@ the device's battery.
 - Moving a V2 capability (for example, Device Owner mode or logs) into scope requires a constitution
   amendment first.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-10
+**Version**: 5.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-27
