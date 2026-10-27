@@ -90,7 +90,7 @@ class ActivationTest {
     fun deactivateNeedsConfirmationAndParentAccess() {
         h.pin()
         assertTrue(h.send(DomainEvent.DeactivateRequested(confirmed = false)).effects.isEmpty())
-        h.send(DomainEvent.ParentUiLeft)
+        h.send(DomainEvent.DeviceLocked)
         assertTrue(h.send(DomainEvent.DeactivateRequested(confirmed = true)).effects.isEmpty())
         assertNull(h.state.pendingActive)
     }
@@ -188,7 +188,7 @@ class ActivationTest {
     @Test
     fun activateNeedsParentAccess() {
         deactivate()
-        h.send(DomainEvent.ParentUiLeft)
+        h.send(DomainEvent.DeviceLocked)
         assertTrue(h.send(DomainEvent.ActivateRequested).effects.isEmpty())
         assertEquals(AuthorizationMode.DEACTIVATED, h.state.mode)
     }

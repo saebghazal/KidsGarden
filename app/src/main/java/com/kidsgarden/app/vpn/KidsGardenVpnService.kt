@@ -41,6 +41,9 @@ class KidsGardenVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var monitor: UnderlyingNetworkMonitor? = null
 
+    /** Whether the current tunnel offers IPv6; rebuilt when the real network gains or loses it. */
+    private var tunnelIpv6 = false
+
     private val handle = VpnServiceHandle { reason -> mainHandler.post { shutdown(reason) } }
 
     private val protector = object : SocketProtector {
@@ -54,6 +57,12 @@ class KidsGardenVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_RECONFIGURE) {
+            // Only a running tunnel is rebuilt; otherwise the next start uses the new list.
+            if (tun != null && startJob?.isActive != true) startJob = scope.launch { rebuildTunnel() }
+            else if (tun == null && startJob?.isActive != true) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (intent?.action != ACTION_START) {
             if (tun == null && startJob?.isActive != true) stopSelf(startId)
             return START_NOT_STICKY
@@ -78,23 +87,62 @@ class KidsGardenVpnService : VpnService() {
         // Consent may have been revoked since the parent screen checked it.
         if (prepare(this) != null) return shutdown(VpnUnavailableReason.CONSENT_MISSING)
 
-        val networkMonitor = UnderlyingNetworkMonitor(this, ::onUnderlyingNetworkChanged).also { it.start() }
+        val networkMonitor = UnderlyingNetworkMonitor(this, ::onUnderlyingNetworkChanged, ::onIpv6Changed).also { it.start() }
         monitor = networkMonitor
 
+        val (descriptor, exclusions) = establishTunnel(networkMonitor)
+        if (descriptor == null) return shutdown(VpnUnavailableReason.ESTABLISH_FAILED)
+        tun = descriptor
+
+        if (!controller.onTunnelEstablished(descriptor.fd, protector, networkMonitor, exclusions.status)) {
+            shutdown(VpnUnavailableReason.ENGINE_FAILED)
+        }
+    }
+
+    /**
+     * The parent changed the apps that skip Kids Garden (FR-038). A new `establish()` replaces
+     * the running interface with one that has the new exclusions; forwarding moves to it and the
+     * old descriptor is closed. If the new interface cannot be made, the old one keeps running.
+     */
+    private suspend fun rebuildTunnel() {
+        val networkMonitor = monitor ?: return
+        val old = tun ?: return
+        val (descriptor, exclusions) = establishTunnel(networkMonitor)
+        if (descriptor == null) return
+        tun = descriptor
+        val ok = controller.onTunnelEstablished(descriptor.fd, protector, networkMonitor, exclusions.status)
+        try {
+            old.close()
+        } catch (_: java.io.IOException) {
+            // already closed
+        }
+        if (!ok) shutdown(VpnUnavailableReason.ENGINE_FAILED)
+    }
+
+    /** Builds and establishes the TUN with the current exclusions. Null descriptor on failure. */
+    private fun establishTunnel(networkMonitor: UnderlyingNetworkMonitor): Pair<ParcelFileDescriptor?, ExclusionResult> {
         val builder = Builder()
             .setSession(getString(R.string.app_name))
             .setMtu(TunnelAddresses.MTU)
             .addAddress(TunnelAddresses.IPV4, TunnelAddresses.IPV4_PREFIX)
-            .addAddress(TunnelAddresses.IPV6, TunnelAddresses.IPV6_PREFIX)
             .addRoute("0.0.0.0", 0)
-            .addRoute("::", 0)
-            .addDnsServer(TunnelAddresses.VIRTUAL_DNS_IPV4)
+        // IPv6 only when the real network has it. Offering it on an IPv4-only network makes
+        // apps (browsers first) try IPv6 that the relay cannot reach, and their connections
+        // are reset (bug 2026-10-27). Without IPv6 configured, Android blocks IPv6 for VPN apps,
+        // so they fail fast and use IPv4; nothing leaks around the VPN.
+        tunnelIpv6 = networkMonitor.hasIpv6
+        if (tunnelIpv6) {
+            builder.addAddress(TunnelAddresses.IPV6, TunnelAddresses.IPV6_PREFIX).addRoute("::", 0)
+        }
+        builder.addDnsServer(TunnelAddresses.VIRTUAL_DNS_IPV4)
             // Meteredness follows the underlying network instead of always "metered".
             .setMetered(false)
             .setConfigureIntent(openAppIntent())
-        // Resolved fresh before every establish; only exclusions, never an allow-list.
+        // Resolved fresh before every establish; only exclusions, never an allow-list. The
+        // parent's own list of apps that skip Kids Garden is added here (FR-038).
+        val parentBypass = (application as KidsGardenApplication).container.settings.value?.bypassPackages.orEmpty()
         val exclusions = CommunicationAppExclusions(AndroidCommunicationPackageResolver(this))
-            .apply(builder.asExclusionTarget())
+            .apply(builder.asExclusionTarget(), parentBypass)
         networkMonitor.network?.let { builder.setUnderlyingNetworks(arrayOf(it)) }
 
         val descriptor = try {
@@ -104,12 +152,12 @@ class KidsGardenVpnService : VpnService() {
         } catch (_: SecurityException) {
             null
         }
-        if (descriptor == null) return shutdown(VpnUnavailableReason.ESTABLISH_FAILED)
-        tun = descriptor
+        return descriptor to exclusions
+    }
 
-        if (!controller.onTunnelEstablished(descriptor.fd, protector, networkMonitor, exclusions.status)) {
-            shutdown(VpnUnavailableReason.ENGINE_FAILED)
-        }
+    /** The real network gained or lost IPv6 (for example Wi-Fi to mobile data): rebuild the tunnel. */
+    private fun onIpv6Changed(hasIpv6: Boolean) {
+        if (tun != null && hasIpv6 != tunnelIpv6 && startJob?.isActive != true) startJob = scope.launch { rebuildTunnel() }
     }
 
     private fun onUnderlyingNetworkChanged(network: Network?) {
@@ -169,5 +217,6 @@ class KidsGardenVpnService : VpnService() {
 
     companion object {
         const val ACTION_START = "com.kidsgarden.app.vpn.START"
+        const val ACTION_RECONFIGURE = "com.kidsgarden.app.vpn.RECONFIGURE"
     }
 }

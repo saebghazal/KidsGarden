@@ -12,13 +12,14 @@ import androidx.datastore.core.DataMigration
 object SettingsMigrations {
 
     /**
-     * v1 → v3 and v2 → v3. The serializer already decoded the older document with current
+     * Every older version to v4. The serializer already decoded the older document with current
      * defaults for every newer field; this resets those fields explicitly and stamps the
      * version so the next write is current.
      *
      * - v1 → v2 (FR-031, FR-034–036): Active, default screen effects, no saved brightness.
      * - v2 → v3 (FR-037): unlock grace with its defaults (on, 5 min, 2 min fade, 60 min
      *   rest) and no previous grace.
+     * - v3 → v4 (FR-038): an empty list of apps that skip Kids Garden.
      */
     val TO_CURRENT: DataMigration<SettingsDocument> = object : DataMigration<SettingsDocument> {
         override suspend fun shouldMigrate(currentData: SettingsDocument): Boolean =
@@ -37,6 +38,9 @@ object SettingsMigrations {
         }
         if (doc.schemaVersion == 2) {
             doc = doc.copy(schemaVersion = 3, unlockGrace = UnlockGraceSettings(), lastUnlockGraceEpochMillis = null)
+        }
+        if (doc.schemaVersion == 3) {
+            doc = doc.copy(schemaVersion = 4, bypassPackages = emptyList())
         }
         return doc
     }

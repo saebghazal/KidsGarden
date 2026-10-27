@@ -51,7 +51,7 @@ fun interface EffectPolicySink {
     fun apply(policy: EffectPolicy, screenOn: Boolean, generation: Long)
 }
 
-/** Saves when the last unlock grace started (FR-037). */
+/** Saves the start of the grace window (FR-037); null clears it. */
 fun interface UnlockGraceStore {
-    suspend fun saveUnlockGraceStart(epochMillis: Long)
+    suspend fun saveUnlockGraceStart(epochMillis: Long?)
 }

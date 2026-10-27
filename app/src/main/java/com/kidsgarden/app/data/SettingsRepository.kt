@@ -91,8 +91,12 @@ class SettingsRepository(
     suspend fun updateUnlockGrace(enabled: Boolean, graceSeconds: Int, fadeSeconds: Int, restSeconds: Int): Result<SettingsDocument> =
         update { it.copy(unlockGrace = UnlockGraceSettings(enabled, graceSeconds, fadeSeconds, restSeconds)) }
 
-    /** When the last unlock grace started; written by SessionManager only (FR-037). */
-    suspend fun saveUnlockGraceStart(epochMillis: Long): Result<SettingsDocument> =
+    /** Apps that skip Kids Garden (FR-038). Sorted and de-duplicated; invalid names rejected. */
+    suspend fun updateBypassPackages(packages: Collection<String>): Result<SettingsDocument> =
+        update { it.copy(bypassPackages = packages.distinct().sorted()) }
+
+    /** Start of the current grace window, or null to clear it; written by SessionManager only (FR-037). */
+    suspend fun saveUnlockGraceStart(epochMillis: Long?): Result<SettingsDocument> =
         update { it.copy(lastUnlockGraceEpochMillis = epochMillis) }
 
     /**

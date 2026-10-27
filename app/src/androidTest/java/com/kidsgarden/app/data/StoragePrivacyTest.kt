@@ -70,6 +70,8 @@ class StoragePrivacyTest {
         "buildUpSeconds", "breakSeconds", "brightnessRestore", "level", "automatic",
         // Schema v3 (FR-037): grace settings and the start time of the last grace only.
         "unlockGrace", "enabled", "graceSeconds", "fadeSeconds", "restSeconds", "lastUnlockGraceEpochMillis",
+        // Schema v4 (FR-038): apps the parent lets skip Kids Garden.
+        "bypassPackages",
     )
 
     private fun keys(element: JsonElement): Set<String> = when (element) {

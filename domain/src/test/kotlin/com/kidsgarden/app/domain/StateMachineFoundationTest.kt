@@ -93,9 +93,9 @@ class StateMachineFoundationTest {
     }
 
     @Test
-    fun parentUiLeftClearsAccessOnly() {
+    fun lockClearsAccessOnly() {
         val withAccess = reduce(AuthorizationState.initial(), DomainEvent.PinVerified).state
-        val result = reduce(withAccess, DomainEvent.ParentUiLeft)
+        val result = reduce(withAccess, DomainEvent.DeviceLocked)
         assertNull(result.state.parentAccess)
         assertEquals(withAccess.generation, result.state.generation)
         assertTrue(result.effects.any { it is Effect.ClearParentUiAccess })

@@ -14,7 +14,12 @@ import com.kidsgarden.app.ui.setup.ModifySettingsPermissionScreen
 import com.kidsgarden.app.ui.setup.OverlayPermissionScreen
 import com.kidsgarden.app.ui.setup.overlaySettingsIntent
 import com.kidsgarden.app.ui.setup.writeSettingsIntent
+import com.kidsgarden.app.ui.settings.BypassAppsScreen
+import com.kidsgarden.app.ui.settings.LaunchableApp
+import com.kidsgarden.app.ui.settings.loadLaunchableApps
 import com.kidsgarden.app.vpn.CompatibilityResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -98,6 +103,7 @@ object Routes {
     const val PRIVACY_INFO = "privacy"
     const val OVERLAY_ACCESS = "settings/overlayAccess"
     const val WRITE_SETTINGS_ACCESS = "settings/writeSettingsAccess"
+    const val BYPASS_APPS = "settings/bypassApps"
 
     /** Inert confirmation after a child session starts; not protected, shows no controls. */
     const val CHILD_STARTED = "childStarted"
@@ -135,17 +141,8 @@ fun KidsGardenNavHost(
         session.parentUiAccessCleared.collect { navController.closeProtectedRoutes() }
     }
 
-    // Leaving the protected graph by navigation also ends parent access.
-    DisposableEffect(navController) {
-        var wasProtected = false
-        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
-            val isProtected = destination.route in Routes.protected
-            if (wasProtected && !isProtected) session.dispatch(DomainEvent.ParentUiLeft)
-            wasProtected = isProtected
-        }
-        navController.addOnDestinationChangedListener(listener)
-        onDispose { navController.removeOnDestinationChangedListener(listener) }
-    }
+    // Leaving the app or the protected screens does not end parent access (clarification
+    // 2026-10-27): only a lock, screen off, child start or process restart does.
 
     /** A just-proven PIN opens the parent interface; navigate once the gate agrees. */
     fun openParentInterface(destination: String) {
@@ -187,10 +184,9 @@ fun KidsGardenNavHost(
             if (setup != null && !credentialPresent) {
                 LaunchedEffect(Unit) { navController.replaceAll(Routes.WELCOME) }
             }
-            // During Parent Mode, opening the app grants parent access without a PIN.
-            val parentModeAccess = snapshot.authorizationMode == AuthorizationMode.PARENT_MODE &&
-                snapshot.parentAccessActive
-            if (parentModeAccess) {
+            // Parent access held since the last PIN entry (the phone has not locked and no
+            // child was given the phone) opens the parent interface without asking again.
+            if (snapshot.parentAccessActive) {
                 LaunchedEffect(Unit) { navController.replaceAll(Routes.ACTIONS) }
             }
             val pinViewModel = viewModel { ParentPinViewModel(container.pinManager) }
@@ -289,18 +285,21 @@ fun KidsGardenNavHost(
 
         guardedComposable(Routes.ACTIONS, accessActive, denied) {
             var switchFailed by remember { mutableStateOf(false) }
-            // Display-only countdown for a running unlock grace; it never changes state.
-            val graceRemaining by produceState<Long?>(null, snapshot) {
+            // Display-only countdowns for the unlock grace (clarification 2026-10-27); they never
+            // change state. Grace left counts down only while it runs (not paused by a call).
+            val graceInfo by produceState<Pair<Long?, Long?>>(null to null, snapshot) {
                 while (true) {
-                    value = snapshot.remainingPlayMillis?.takeIf { snapshot.unlockGraceActive }?.let { atSnapshot ->
-                        if (snapshot.playPaused) atSnapshot
-                        else (atSnapshot - (container.time.elapsedRealtimeMillis() - snapshot.snapshotElapsedMillis)).coerceAtLeast(0L)
-                    }
+                    val passed = (container.time.elapsedRealtimeMillis() - snapshot.snapshotElapsedMillis).coerceAtLeast(0L)
+                    val running = snapshot.unlockGraceActive && !snapshot.playPaused
+                    val left = snapshot.graceLeftMillis?.let { if (running) (it - passed).coerceAtLeast(0L) else it }
+                    val next = snapshot.nextGraceInMillis?.let { (it - passed).coerceAtLeast(0L) }
+                    value = left to next
                     delay(1_000L)
                 }
             }
             ParentActionScreen(
-                graceRemainingMillis = graceRemaining,
+                graceLeftMillis = graceInfo.first,
+                nextGraceInMillis = graceInfo.second,
                 // The Active/Deactivated switch at the top (FR-031). The PIN was entered to reach
                 // this screen, so switching needs no second PIN; Deactivate still confirms once.
                 active = snapshot.active,
@@ -403,7 +402,9 @@ fun KidsGardenNavHost(
                     breakSeconds = document?.screenEffects?.breakSeconds ?: EffectCycle.DEFAULT_BREAK_SECONDS,
                     methods = methodStatuses(snapshot),
                     unlockGrace = document?.unlockGrace ?: UnlockGraceSettings(),
+                    bypassCount = document?.bypassPackages?.size ?: 0,
                 ),
+                onBypassApps = { navController.navigate(Routes.BYPASS_APPS) },
                 onUnlockGrace = { g ->
                     save { repository.updateUnlockGrace(g.enabled, g.graceSeconds, g.fadeSeconds, g.restSeconds) }
                 },
@@ -455,6 +456,28 @@ fun KidsGardenNavHost(
                 onLimitations = { navController.navigate(Routes.LIMITATIONS) },
                 onPrivacy = { navController.navigate(Routes.PRIVACY_INFO) },
                 onEnableCallPause = { navController.navigate(Routes.PHONE_STATE) },
+            )
+        }
+
+        guardedComposable(Routes.BYPASS_APPS, accessActive, denied) {
+            val context = LocalContext.current
+            val document by container.settings.collectAsStateWithLifecycle()
+            var saveFailed by remember { mutableStateOf(false) }
+            // Listed only while this parent screen is open; nothing about it is stored except
+            // the apps the parent checks (FR-038).
+            val apps by produceState<List<LaunchableApp>?>(null) {
+                value = withContext(Dispatchers.IO) { loadLaunchableApps(context) }
+            }
+            BypassAppsScreen(
+                apps = apps,
+                selected = document?.bypassPackages.orEmpty().toSet(),
+                saveFailed = saveFailed,
+                onToggle = { packageName, skip ->
+                    val current = document?.bypassPackages.orEmpty().toSet()
+                    val updated = if (skip) current + packageName else current - packageName
+                    scope.launch { saveFailed = container.settingsRepository.updateBypassPackages(updated).isFailure }
+                },
+                onDone = { navController.popBackStack() },
             )
         }
 

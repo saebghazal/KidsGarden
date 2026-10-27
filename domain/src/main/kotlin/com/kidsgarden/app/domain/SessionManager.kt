@@ -48,6 +48,10 @@ data class ParentFacingSnapshot(
     val backgroundStopped: Boolean = false,
     /** The current grant is an unlock grace (FR-037), not parent-given play time. */
     val unlockGraceActive: Boolean = false,
+    /** Unlock grace left in the current window (running or paused by a lock); null when none. */
+    val graceLeftMillis: Long? = null,
+    /** Time until the current grace window ends and the next unlock gets a fresh grace. */
+    val nextGraceInMillis: Long? = null,
 )
 
 /** Parent-facing failures of a requested switch (contracts/session-manager.md). */
@@ -224,5 +228,15 @@ class SessionManager(
                 state.setupComplete &&
                 state.vpnCapability == VpnCapability.UNAVAILABLE,
             unlockGraceActive = state.childGrant?.unlockGrace == true,
+            graceLeftMillis = graceLeft(state, now),
+            nextGraceInMillis = StateMachine.currentGraceWindow(state, now)?.let { it.endElapsedMillis - now.elapsedMillis },
         )
+}
+
+/** Grace left now: the running grace grant, else the budget banked in an open window. */
+private fun graceLeft(state: AuthorizationState, now: TimeSnapshot): Long? {
+    val grant = state.childGrant
+    if (grant != null && grant.unlockGrace) return grant.remainingMillis(now.elapsedMillis)
+    if (!state.settings.unlockGraceEnabled || state.mode == AuthorizationMode.DEACTIVATED) return null
+    return StateMachine.currentGraceWindow(state, now)?.remainingMillis?.takeIf { it > 0L }
 }

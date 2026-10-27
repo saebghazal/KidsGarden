@@ -40,8 +40,10 @@ fun ParentActionScreen(
     /** Why grants are unavailable, and the button that fixes it (VPN setup by default). */
     limitedText: Int = R.string.vpn_limited,
     fixLabel: Int = R.string.action_vpn_setup,
-    /** Time left in a running unlock grace (FR-037), or null. Parent-only screen. */
-    graceRemainingMillis: Long? = null,
+    /** Unlock grace left in the current window (FR-037), or null. Parent-only screen. */
+    graceLeftMillis: Long? = null,
+    /** Time until the next fresh grace, shown when no grace is left in the window. */
+    nextGraceInMillis: Long? = null,
 ) {
     SetupScaffold(
         title = stringResource(R.string.actions_title),
@@ -80,8 +82,14 @@ fun ParentActionScreen(
         },
     ) {
         if (onActiveChange != null) ActiveSwitchCard(active = active, onActiveChange = onActiveChange, failed = switchFailed)
-        if (active && graceRemainingMillis != null) {
-            BodyText(stringResource(R.string.grace_remaining, formatMinutesSeconds(graceRemainingMillis)))
+        // Inside the app only, never in the status bar or a notification (clarification 2026-10-27).
+        if (active) {
+            when {
+                graceLeftMillis != null && graceLeftMillis > 0L ->
+                    BodyText(stringResource(R.string.grace_remaining, formatMinutesSeconds(graceLeftMillis)))
+                nextGraceInMillis != null ->
+                    BodyText(stringResource(R.string.grace_next_in, formatMinutesSeconds(nextGraceInMillis)))
+            }
         }
         if (active) {
             BodyText(

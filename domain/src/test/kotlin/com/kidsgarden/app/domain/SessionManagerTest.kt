@@ -54,14 +54,16 @@ class SessionManagerTest {
     }
 
     @Test
-    fun pinThenUiLeftOpensAndClosesParentAccess() = runTest {
+    fun pinOpensParentAccessAndLockClosesIt() = runTest {
         val manager = manager(RecordingSink(), RecordingScheduler())
 
         manager.dispatch(DomainEvent.PinVerified)
         assertTrue(manager.state.value.parentAccessActive)
         assertEquals(AuthorizationMode.DULL, manager.state.value.authorizationMode)
 
-        manager.dispatch(DomainEvent.ParentUiLeft)
+        manager.dispatch(DomainEvent.UiOpened)
+        assertTrue(manager.state.value.parentAccessActive)
+        manager.dispatch(DomainEvent.DeviceLocked)
         assertFalse(manager.state.value.parentAccessActive)
     }
 
@@ -147,7 +149,7 @@ class SessionManagerTest {
         eagerScope().launch { manager.parentUiAccessCleared.collect { cleared += it } }
 
         manager.dispatch(DomainEvent.PinVerified)
-        manager.dispatch(DomainEvent.ParentUiLeft)
+        manager.dispatch(DomainEvent.ScreenOff)
 
         assertEquals(1, cleared.size)
     }

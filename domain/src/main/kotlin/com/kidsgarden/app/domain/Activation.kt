@@ -36,6 +36,8 @@ internal object Activation {
             rampStage = null,
             parentAccess = state.parentAccess?.copy(grantPermission = null),
             pendingActive = null,
+            graceWindow = null,
+            graceWindowKnown = true,
             generation = state.generation + 1,
         )
         return ReduceResult(
@@ -43,6 +45,8 @@ internal object Activation {
             listOf(
                 Effect.CancelBoundary(next.generation),
                 Effect.StopVpn(next.generation),
+                // Turning Kids Garden off and on resets the unlock grace (clarification 2026-10-27).
+                Effect.PersistUnlockGraceStart(null, next.generation),
                 Effect.PublishParentStatus(next.generation),
             ),
         )
@@ -84,8 +88,8 @@ internal object Activation {
 
         DomainEvent.PinVerified -> issueParentAccess(state)
 
-        DomainEvent.PinChanged,
-        DomainEvent.ParentUiLeft -> clearParentAccess(state)
+        // The parent stays in the interface after changing the PIN (clarification 2026-10-27).
+        DomainEvent.PinChanged -> unchanged(state)
 
         DomainEvent.ScreenOff -> clearParentAccess(state.copy(screenOn = false, interactiveAndUnlocked = false))
         DomainEvent.DeviceLocked -> clearParentAccess(state.copy(interactiveAndUnlocked = false))
@@ -136,15 +140,20 @@ internal object Activation {
      * cannot run). The parent stays in the parent interface; activation itself grants nothing.
      */
     private fun activate(state: AuthorizationState): ReduceResult {
-        val next = state.copy(
-            mode = AuthorizationMode.DULL,
-            pendingActive = null,
-            generation = state.generation + 1,
+        val next = StateMachine.refreshPermission(
+            state.copy(
+                mode = AuthorizationMode.DULL,
+                pendingActive = null,
+                graceWindow = null,
+                graceWindowKnown = true,
+                generation = state.generation + 1,
+            ),
         )
         return ReduceResult(
             next,
             listOf(
                 Effect.StartVpn(next.generation),
+                Effect.PersistUnlockGraceStart(null, next.generation),
                 Effect.ApplyNetworkPolicy(StateMachine.dullPolicy(next), next.generation),
                 Effect.PublishParentStatus(next.generation),
             ),

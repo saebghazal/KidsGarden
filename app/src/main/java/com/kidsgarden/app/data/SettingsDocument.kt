@@ -8,11 +8,11 @@ import com.kidsgarden.app.domain.UnlockGrace
 import kotlinx.serialization.Serializable
 
 /**
- * Persisted SettingsDocument v3 (data-model.md). Parent settings only: there is no
+ * Persisted SettingsDocument v4 (data-model.md). Parent settings only: there is no
  * authorization mode, child session, pause, token, or call field (FR-025).
  *
  * | Field | Type / default | Validation and meaning |
- * | schemaVersion | Int / 3 | Explicit positive supported version (1, 2 or 3); older versions are migrated |
+ * | schemaVersion | Int / 4 | Explicit positive supported version (1–4); older versions are migrated |
  * | active | Boolean / true | Parent Active/Deactivated choice (FR-031); false only after a confirmed Deactivate |
  * | pinCredential | PinCredential? / null | Null means enrollment/recovery, never empty-PIN access |
  * | dullIntensity | Enum / MEDIUM | GENTLE, MEDIUM, STRONG |
@@ -20,7 +20,8 @@ import kotlinx.serialization.Serializable
  * | screenEffects | ScreenEffects | Grey screen, lower media volume, lower brightness switches and cycle timings |
  * | brightnessRestore | BrightnessRestore? / null | Parent brightness saved before the brightness effect first lowers it |
  * | unlockGrace | UnlockGraceSettings | Unlock grace switch (on by default) and grace, fade and rest times (FR-037) |
- * | lastUnlockGraceEpochMillis | Long? / null | When the last unlock grace started; only so a restart cannot reset the rest |
+ * | lastUnlockGraceEpochMillis | Long? / null | Start of the current grace window; only so a restart cannot reopen one early |
+ * | bypassPackages | List<String> / empty | Parent-chosen apps that skip Kids Garden (bypass the VPN; FR-038) |
  * | vpnDullingConfiguration | ProfileConfiguration | Canonical profile map, no redundant top-level cap values |
  * | softLandingDurationSeconds | Int / 120 | Exactly 60 or 120 |
  * | setup | SetupFlags | pinCreated and onboardingComplete; permission status is runtime-derived |
@@ -36,6 +37,7 @@ data class SettingsDocument(
     val brightnessRestore: BrightnessRestore? = null,
     val unlockGrace: UnlockGraceSettings = UnlockGraceSettings(),
     val lastUnlockGraceEpochMillis: Long? = null,
+    val bypassPackages: List<String> = emptyList(),
     val vpnDullingConfiguration: Map<DullIntensity, ThrottleSettings> = DEFAULT_PROFILES,
     val softLandingDurationSeconds: Int = 120,
     val setup: SetupFlags = SetupFlags(),
@@ -49,6 +51,9 @@ data class SettingsDocument(
         screenEffects.validate()
         brightnessRestore?.validate()
         unlockGrace.validate()
+        check(bypassPackages.size <= MAX_BYPASS_PACKAGES) { "too many bypass apps" }
+        check(bypassPackages.distinct().size == bypassPackages.size) { "duplicate bypass app" }
+        check(bypassPackages.all { PACKAGE_NAME.matches(it) }) { "invalid package name" }
         lastUnlockGraceEpochMillis?.let { check(it >= 0L) { "lastUnlockGraceEpochMillis must not be negative" } }
         check(softLandingDurationSeconds == 60 || softLandingDurationSeconds == 120) {
             "softLandingDurationSeconds must be exactly 60 or 120"
@@ -94,9 +99,13 @@ data class SettingsDocument(
     }
 
     companion object {
-        const val CURRENT_SCHEMA_VERSION = 3
+        const val CURRENT_SCHEMA_VERSION = 4
+
+        /** Parent-chosen apps that skip the VPN (FR-038); a bound, not a goal. */
+        const val MAX_BYPASS_PACKAGES = 200
+        private val PACKAGE_NAME = Regex("""[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+""")
         const val LEGACY_SCHEMA_VERSION = 1
-        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, CURRENT_SCHEMA_VERSION)
+        val SUPPORTED_SCHEMA_VERSIONS = setOf(1, 2, 3, CURRENT_SCHEMA_VERSION)
 
         /** Initial values: Gentle 256/300; Medium 128/600; Strong 64/1000. */
         val DEFAULT_PROFILES: Map<DullIntensity, ThrottleSettings> = mapOf(

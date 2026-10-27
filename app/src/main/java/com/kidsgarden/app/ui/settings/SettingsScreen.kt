@@ -58,6 +58,8 @@ data class SettingsUiState(
     val methods: List<MethodStatus> = emptyList(),
     /** Unlock grace (FR-037). */
     val unlockGrace: UnlockGraceSettings = UnlockGraceSettings(),
+    /** How many apps the parent lets skip Kids Garden (FR-038). */
+    val bypassCount: Int = 0,
 )
 
 /**
@@ -80,6 +82,7 @@ fun SettingsScreen(
     onBreak: (seconds: Int) -> Unit = {},
     onCheckPhone: () -> Unit = {},
     onUnlockGrace: (UnlockGraceSettings) -> Unit = {},
+    onBypassApps: () -> Unit = {},
 ) {
     var lastMethodWarning by remember { mutableStateOf(false) }
     val enabledCount = (if (state.networkEnabled) 1 else 0) + state.enabledEffects.size
@@ -169,6 +172,12 @@ fun SettingsScreen(
             Text(stringResource(R.string.compat_check))
         }
         BodyText(stringResource(R.string.settings_vpn_android_note))
+
+        Heading(stringResource(R.string.bypass_title))
+        BodyText(pluralStringResource(R.plurals.bypass_count, state.bypassCount, state.bypassCount))
+        OutlinedButton(onClick = onBypassApps, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.bypass_open))
+        }
 
         val buildUpName = stringResource(R.string.effect_build_up_heading)
         Heading(buildUpName)

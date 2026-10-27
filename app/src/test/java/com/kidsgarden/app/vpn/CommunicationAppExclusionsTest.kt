@@ -104,4 +104,16 @@ class CommunicationAppExclusionsTest {
         assertEquals(ExclusionStatus.NONE, result.status)
         assertEquals(3, result.unresolvedRoles)
     }
+
+    @Test
+    fun parentChosenAppsAreExcludedToo() {
+        val target = FakeTarget(missing = setOf("org.gone.app"))
+        val result = exclusions.apply(target, listOf("com.example.homework", "org.gone.app", "com.kidsgarden.app"))
+        assertTrue("com.example.homework" in result.applied)
+        assertEquals(ExclusionSkipReason.NOT_INSTALLED, result.skipped["org.gone.app"])
+        // Kids Garden itself can never skip its own VPN, even if listed.
+        assertFalse("com.kidsgarden.app" in target.excluded)
+        // The fixed communication apps are still excluded.
+        assertTrue(CommunicationAppExclusions.WHATSAPP in result.applied)
+    }
 }

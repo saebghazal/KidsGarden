@@ -113,16 +113,16 @@ class SettingsRepositoryTest {
         val file = File(tmp.root, "v1.json").apply { writeText(v1Text) }
         val repo = repository(file)
         val doc = repo.load().getOrThrow()
-        assertEquals(3, doc.schemaVersion)
+        assertEquals(4, doc.schemaVersion)
         assertTrue(doc.active)
         assertEquals(DullIntensity.GENTLE, doc.dullIntensity)
-        assertTrue(file.readText().contains("\"schemaVersion\":3"))
+        assertTrue(file.readText().contains("\"schemaVersion\":4"))
     }
 
     @Test
     fun defaultsAndCorruptionAreActive() = runTest {
         assertTrue(repository().load().getOrThrow().active)
-        val file = File(tmp.root, "bad.json").apply { writeText("{\"schemaVersion\":3}") }
+        val file = File(tmp.root, "bad.json").apply { writeText("{\"schemaVersion\":4}") }
         assertTrue(repository(file).load().getOrThrow().active)
     }
 
@@ -188,5 +188,14 @@ class SettingsRepositoryTest {
         val doc = repo.updateUnlockGrace(false, 600, 60, 7200).getOrThrow()
         assertEquals(UnlockGraceSettings(false, 600, 60, 7200), doc.unlockGrace)
         assertEquals(42L, repo.saveUnlockGraceStart(42L).getOrThrow().lastUnlockGraceEpochMillis)
+    }
+
+    @Test
+    fun bypassPackagesAreSortedDeduplicatedAndValidated() = runTest {
+        val repo = repository()
+        val doc = repo.updateBypassPackages(listOf("org.school.app", "com.example.game", "org.school.app")).getOrThrow()
+        assertEquals(listOf("com.example.game", "org.school.app"), doc.bypassPackages)
+        assertTrue(repo.updateBypassPackages(listOf("bad name")).exceptionOrNull() is SettingsFailure.InvalidValue)
+        assertEquals(emptyList<String>(), repo.updateBypassPackages(emptyList()).getOrThrow().bypassPackages)
     }
 }

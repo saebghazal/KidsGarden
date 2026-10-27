@@ -164,7 +164,18 @@ internal class LocalSocksRelay(
         }
         val egress = Socket()
         track(egress)
-        if (!protector.protect(egress)) {
+        // A new TCP Socket has no OS socket until it binds or connects, so it cannot be
+        // protected yet (bug 2026-10-27: protect failed, every TCP connection was reset and
+        // only UDP/QUIC sites loaded). Binding to an ephemeral port creates it first.
+        val protectedOk = try {
+            egress.bind(null)
+            protector.protect(egress)
+        } catch (_: IOException) {
+            false
+        } catch (_: RuntimeException) {
+            false
+        }
+        if (!protectedOk) {
             reply(output, REP_GENERAL_FAILURE)
             flow.close()
             return close(client, egress)

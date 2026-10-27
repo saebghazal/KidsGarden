@@ -71,6 +71,9 @@ interface VpnServiceLauncher {
 
     /** Starts the foreground VPN service from a visible parent screen. */
     fun startService()
+
+    /** Asks the running service to rebuild its tunnel with the current exclusions (FR-038). */
+    fun reconfigure() = Unit
 }
 
 /** The running service, so the controller can shut it down (closing the TUN). */
@@ -201,6 +204,15 @@ class VpnDullingController(
                 else -> CompatibilityFailure.NO_TRAFFIC
             },
         )
+    }
+
+    /**
+     * The parent changed the apps that skip Kids Garden (FR-038): rebuild the running tunnel
+     * in place so the new exclusions apply. Capability stays RUNNING, so no grant ends. Does
+     * nothing while the VPN is not running; the next start uses the new list anyway.
+     */
+    fun reconfigure() {
+        if (_capability.value.capability == VpnCapability.RUNNING) launcher.reconfigure()
     }
 
     /** Idempotent. Shuts the service down if it runs; otherwise just reports [reason]. */

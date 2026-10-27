@@ -25,6 +25,11 @@
         <intent>
             <action android:name="android.intent.action.DIAL" />
         </intent>
+        <!-- Launcher apps, listed only on the parent screen for apps that skip Kids Garden (FR-038). -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.SENDTO" />
             <data android:scheme="smsto" />

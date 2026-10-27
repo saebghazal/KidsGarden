@@ -37,8 +37,13 @@ data class AuthorizationState(
     val effectAccess: Map<ScreenEffect, EffectAccess> = emptyMap(),
     /** The `active` value being saved for a requested Activate or Deactivate; null when none. */
     val pendingActive: Boolean? = null,
-    /** Start of the latest unlock grace in this process (epoch); the saved value covers restarts. */
-    val lastUnlockGraceEpochMillis: Long? = null,
+    /** The current unlock-grace window in this process, if any (FR-037). */
+    val graceWindow: GraceWindow? = null,
+    /**
+     * True once this process opened or cleared a window itself; from then on the saved start
+     * time is not consulted, so a late settings echo cannot bring back a cleared window.
+     */
+    val graceWindowKnown: Boolean = false,
 ) {
     /** True when setup and live capability allow new grants (Assumptions; FR-019). */
     val setupComplete: Boolean

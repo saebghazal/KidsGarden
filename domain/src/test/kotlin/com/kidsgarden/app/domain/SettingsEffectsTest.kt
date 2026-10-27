@@ -2,6 +2,7 @@ package com.kidsgarden.app.domain
 
 import com.kidsgarden.app.domain.ReducerHarness.Companion.MINUTE
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -40,16 +41,17 @@ class SettingsEffectsTest {
     }
 
     @Test
-    fun pinChangeRevokesEveryGrantAndAllAccess() {
+    fun pinChangeEndsEveryGrantButKeepsTheParentIn() {
         h.startChild(30)
         h.pin()
         val before = h.state.generation
         val result = h.send(DomainEvent.PinChanged)
         assertEquals(AuthorizationMode.DULL, h.state.mode)
         assertNull(h.state.childGrant)
-        assertNull(h.state.parentAccess)
+        // The parent who just changed the PIN stays in the interface (clarification 2026-10-27).
+        assertNotNull(h.state.parentAccess)
         assertTrue(h.state.generation > before)
-        assertTrue(result.effects.any { it is Effect.ClearParentUiAccess })
+        assertFalse(result.effects.any { it is Effect.ClearParentUiAccess })
     }
 
     @Test
@@ -57,7 +59,6 @@ class SettingsEffectsTest {
         h.startParent()
         h.send(DomainEvent.PinChanged)
         assertEquals(AuthorizationMode.DULL, h.state.mode)
-        assertNull(h.state.parentAccess)
     }
 
     @Test

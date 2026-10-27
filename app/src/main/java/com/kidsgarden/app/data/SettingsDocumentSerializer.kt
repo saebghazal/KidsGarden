@@ -35,6 +35,7 @@ object SettingsDocumentSerializer : Serializer<SettingsDocument> {
     private val KEYS_ADDED_IN: Map<Int, Set<String>> = mapOf(
         2 to setOf("active", "screenEffects", "brightnessRestore"),
         3 to setOf("unlockGrace", "lastUnlockGraceEpochMillis"),
+        4 to setOf("bypassPackages"),
     )
 
     private val json = Json {

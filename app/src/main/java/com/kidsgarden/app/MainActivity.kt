@@ -49,15 +49,6 @@ class MainActivity : ComponentActivity() {
         container.effectCapability.refresh()
         container.sessionManager.dispatch(DomainEvent.UiOpened)
     }
-
-    override fun onStop() {
-        super.onStop()
-        // Leaving the parent interface clears parent access (FR-004). Rotation and
-        // other configuration changes are not "leaving".
-        if (!isChangingConfigurations) {
-            container.sessionManager.dispatch(DomainEvent.ParentUiLeft)
-        }
-    }
 }
 
 /**

@@ -19,6 +19,8 @@ import com.kidsgarden.app.ui.dashboard.DashboardUiState
 import com.kidsgarden.app.ui.dashboard.DullingMethod
 import com.kidsgarden.app.ui.dashboard.MethodState
 import com.kidsgarden.app.ui.dashboard.MethodStatus
+import com.kidsgarden.app.ui.settings.BypassAppsScreen
+import com.kidsgarden.app.ui.settings.LaunchableApp
 import com.kidsgarden.app.ui.settings.SettingsScreen
 import com.kidsgarden.app.ui.settings.SettingsUiState
 import com.kidsgarden.app.ui.setup.ModifySettingsPermissionScreen
@@ -209,5 +211,37 @@ class MethodSettingsFlowTest {
         compose.setContent { DashboardScreen(state = dashboard(), onParentOptions = {}) }
         compose.onAllNodesWithText(text(R.string.compat_check)).assertCountEquals(0)
         compose.onAllNodesWithText(text(R.string.background_stopped)).assertCountEquals(0)
+    }
+
+    @Test
+    fun bypassAppsScreenListsAppsAndReportsChoices() {
+        val toggles = mutableListOf<Pair<String, Boolean>>()
+        compose.setContent {
+            BypassAppsScreen(
+                apps = listOf(LaunchableApp("com.example.homework", "Homework"), LaunchableApp("com.example.maps", "Maps")),
+                selected = setOf("com.example.maps"),
+                saveFailed = false,
+                onToggle = { pkg, skip -> toggles += pkg to skip },
+                onDone = {},
+            )
+        }
+        compose.onNodeWithText(text(R.string.bypass_body)).assertIsDisplayed()
+        compose.onNodeWithText("Homework").performScrollTo().performClick()
+        compose.onNodeWithText("Maps").performScrollTo().performClick()
+        assertEquals(listOf("com.example.homework" to true, "com.example.maps" to false), toggles)
+    }
+
+    @Test
+    fun parentOptionsShowGraceLeftOrTimeToTheNextGrace() {
+        val left = androidx.compose.runtime.mutableStateOf<Long?>(150_000L)
+        compose.setContent {
+            com.kidsgarden.app.ui.dashboard.ParentActionScreen(
+                protectionReady = true, onUseAsParent = {}, onGiveToChild = {}, onSettings = {}, onVpnSetup = {},
+                graceLeftMillis = left.value, nextGraceInMillis = 1_800_000L,
+            )
+        }
+        compose.onNodeWithText(context.getString(R.string.grace_remaining, "2:30")).assertIsDisplayed()
+        compose.runOnIdle { left.value = 0L }
+        compose.onNodeWithText(context.getString(R.string.grace_next_in, "30:00")).assertIsDisplayed()
     }
 }

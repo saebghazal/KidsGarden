@@ -182,7 +182,10 @@ class AppContainer(context: Context) {
                 }
                 .collect { document ->
                     storageAvailable.value = true
+                    val previousBypass = _settings.value?.bypassPackages
                     _settings.value = document
+                    // A changed list of apps that skip Kids Garden rebuilds the running tunnel (FR-038).
+                    if (previousBypass != null && previousBypass != document.bypassPackages) vpnController.reconfigure()
                     sessionManager.dispatch(DomainEvent.SettingsChanged(document.toDomainSettings()))
                     if (first) {
                         // Brightness left lowered by process death goes back first (FR-034c).

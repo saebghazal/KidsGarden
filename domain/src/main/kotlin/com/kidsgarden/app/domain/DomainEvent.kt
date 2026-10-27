@@ -13,8 +13,11 @@ sealed interface DomainEvent {
     data object RebootObserved : DomainEvent
     data object PackageReplaced : DomainEvent
 
+    /**
+     * The app came to the foreground. Leaving the app does not end parent access (clarification
+     * 2026-10-27): only a lock, screen off, child start or process restart does.
+     */
     data object UiOpened : DomainEvent
-    data object ParentUiLeft : DomainEvent
 
     /** PIN verification succeeded. The reducer issues opaque tokens; no PIN is passed. */
     data object PinVerified : DomainEvent
@@ -89,7 +92,7 @@ data class DomainSettings(
     val unlockGraceSeconds: Int = UnlockGrace.DEFAULT_GRACE_SECONDS,
     val unlockGraceFadeSeconds: Int = UnlockGrace.DEFAULT_FADE_SECONDS,
     val unlockGraceRestSeconds: Int = UnlockGrace.DEFAULT_REST_SECONDS,
-    /** When the last unlock grace started (epoch), saved so a restart cannot reset the rest. */
+    /** Start of the current grace window (epoch), saved so a restart cannot reopen one early. */
     val lastUnlockGraceEpochMillis: Long? = null,
 )
 
@@ -150,6 +153,6 @@ sealed interface Effect {
     /** Screen and sound effects; [screenOn] lets the platform stop or restart the cycle. */
     data class ApplyEffectPolicy(val policy: EffectPolicy, val screenOn: Boolean, override val generation: Long) : Effect
 
-    /** Save when an unlock grace started (FR-037). Only that time is stored. */
-    data class PersistUnlockGraceStart(val epochMillis: Long, override val generation: Long) : Effect
+    /** Save the start of the grace window (FR-037), or clear it with null. Only that time is stored. */
+    data class PersistUnlockGraceStart(val epochMillis: Long?, override val generation: Long) : Effect
 }

@@ -89,11 +89,23 @@ class ParentModeTest {
     }
 
     @Test
-    fun appSwitchingKeepsTheGrant() {
-        val result = reduce(inParentMode(), DomainEvent.ParentUiLeft)
+    fun appSwitchingKeepsTheGrantAndParentAccess() {
+        // Leaving and reopening the app is no event that ends anything (clarification 2026-10-27).
+        val result = reduce(inParentMode(), DomainEvent.UiOpened)
         assertEquals(AuthorizationMode.PARENT_MODE, result.state.mode)
-        assertNull(result.state.parentAccess)
+        assertNotNull(result.state.parentAccess)
         assertTrue(result.appliedPolicies().isEmpty())
+    }
+
+    @Test
+    fun endingParentModeInsideTheAppKeepsParentAccess() {
+        for (event in listOf(DomainEvent.ManualParentExit, DomainEvent.VpnCapabilityChanged(VpnCapability.UNAVAILABLE))) {
+            val result = reduce(inParentMode(), event)
+            assertEquals("after $event", AuthorizationMode.DULL, result.state.mode)
+            assertNotNull("after $event", result.state.parentAccess)
+            assertNotNull("after $event", result.state.parentAccess!!.grantPermission)
+            assertTrue("after $event", result.appliedPolicies().none { it == NetworkPolicy.Normal })
+        }
     }
 
     @Test
@@ -102,9 +114,7 @@ class ParentModeTest {
             DomainEvent.ScreenOff,
             DomainEvent.DeviceLocked,
             DomainEvent.UserPresent,
-            DomainEvent.ManualParentExit,
             DomainEvent.InteractivityObserved(false),
-            DomainEvent.VpnCapabilityChanged(VpnCapability.UNAVAILABLE),
             DomainEvent.SettingsInvalid,
             DomainEvent.ProcessStarted(),
             DomainEvent.RebootObserved,
@@ -129,8 +139,7 @@ class ParentModeTest {
 
     @Test
     fun reopeningTheAppInParentModeNeedsNoPin() {
-        val left = reduce(inParentMode(), DomainEvent.ParentUiLeft).state
-        val result = reduce(left, DomainEvent.UiOpened)
+        val result = reduce(inParentMode(), DomainEvent.UiOpened)
         assertEquals(AuthorizationMode.PARENT_MODE, result.state.mode)
         assertNotNull(result.state.parentAccess)
         assertNotNull(result.state.parentAccess!!.grantPermission)
@@ -139,16 +148,14 @@ class ParentModeTest {
 
     @Test
     fun reopeningInParentModeCanHandThePhoneToAChild() {
-        val opened = reduce(reduce(inParentMode(), DomainEvent.ParentUiLeft).state, DomainEvent.UiOpened).state
+        val opened = reduce(inParentMode(), DomainEvent.UiOpened).state
         val result = reduce(opened, DomainEvent.StartChildRequested(permission(opened), 40))
         assertEquals(AuthorizationMode.CHILD_PLAY_SESSION, result.state.mode)
         assertNull(result.state.parentAccess)
     }
 
     @Test
-    fun openingTheAppOutsideParentModeStillNeedsThePin() {
-        val dull = reduce(inParentMode(), DomainEvent.ManualParentExit).state
-        assertNull(reduce(dull, DomainEvent.UiOpened).state.parentAccess)
+    fun openingTheAppAfterALockNeedsThePin() {
         val locked = reduce(inParentMode(), DomainEvent.ScreenOff).state
         assertNull(reduce(locked, DomainEvent.UiOpened).state.parentAccess)
     }

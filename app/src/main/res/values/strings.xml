@@ -221,10 +221,21 @@
     <string name="unlock_grace_time">Grace time</string>
     <string name="unlock_grace_fade">Fade to dull</string>
     <string name="unlock_grace_rest">Rest time</string>
-    <string name="grace_remaining">Unlock grace is on: %1$s left before the phone becomes dull.</string>
+    <string name="grace_remaining">Unlock grace left: %1$s</string>
+    <string name="grace_next_in">No unlock grace left. Next grace in %1$s</string>
     <string name="mode_unlock_grace">Unlock grace is on. The phone will slowly become dull.</string>
     <plurals name="hours">
         <item quantity="one">%1$d hour</item>
         <item quantity="other">%1$d hours</item>
+    </plurals>
+
+    <!-- Apps that skip Kids Garden (FR-038); parent-only -->
+    <string name="bypass_title">Apps that skip Kids Garden</string>
+    <string name="bypass_body">Checked apps always get a normal internet connection, also in Dull Mode. Kids Garden does not slow them and does not look at what they do. Phone, text messages and WhatsApp always skip Kids Garden.</string>
+    <string name="bypass_loading">Loading apps…</string>
+    <string name="bypass_open">Choose apps that skip Kids Garden</string>
+    <plurals name="bypass_count">
+        <item quantity="one">%1$d app skips Kids Garden.</item>
+        <item quantity="other">%1$d apps skip Kids Garden.</item>
     </plurals>
 </resources>

@@ -42,7 +42,6 @@ class DefaultDullTest {
             DomainEvent.UserPresent,
             DomainEvent.UiOpened,
             DomainEvent.PinVerified,
-            DomainEvent.ParentUiLeft,
             DomainEvent.UserPresent,
         )
         for (event in events) {
