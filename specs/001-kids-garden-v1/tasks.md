@@ -302,6 +302,26 @@ description: "Task list for Kids Garden V1"
 - [X] T136 Show a running unlock grace with a countdown on Parent options and the Status page (parent-only)
 - [X] T137 Owner UI changes 2026-10-25: every time setting uses up/down arrows (`TimeStepper.kt`); the app opens as a card over the dimmed home screen instead of full screen (`MainActivity.kt`, `themes.xml`)
 
+## Phase 13: Parent access, apps that skip Kids Garden, grace window (clarifications 2026-10-27)
+
+**Goal**: Requirements 1–4 of the 2026-10-27 clarification. Constitution v5.0.0; plan Phase 17.
+
+**Independent Test**: Open the app with the PIN, leave and reopen: no PIN. Lock: PIN. Check an app in "Apps that skip Kids Garden": it is fast in DULL while others stay slow. Unlock, use 2 minutes, lock 10 minutes, unlock: 3 grace minutes left. Toggle the switch off and on: the grace resets.
+
+- [X] T138 Remove `ParentUiLeft` (domain event, `MainActivity.onStop`, navigation listener); `expireToDull` keeps access with a fresh permission (`refreshPermission`); Exit Parent Mode, PIN change and VPN loss keep access; `UiOpened` re-arms the permission; the PIN route forwards to Parent options while access is held (FR-004)
+- [X] T139 [P] Update access tests in `ParentModeTest.kt`, `SettingsEffectsTest.kt`, `ActivationTest.kt`, `SessionManagerTest.kt`, `StateMachineFoundationTest.kt`, `DefaultDullTest.kt`
+- [X] T140 Add `GraceWindow` and `windowFromSaved` (`UnlockGrace.kt`); window open on first unlock, lock banks the budget, continue at the same fade stage, window end (lost grace, fade at end), boundaries capped at the window end, reset on Activate/Deactivate/Parent Mode with `PersistUnlockGraceStart(null)` (FR-037)
+- [X] T141 [P] Rewrite `domain/src/test/kotlin/com/kidsgarden/app/domain/UnlockGraceTest.kt` (16 cases) for the window model
+- [X] T142 `ParentFacingSnapshot.graceLeftMillis` and `nextGraceInMillis`; Parent options shows grace left or time to the next grace, inside the app only
+- [X] T143 Settings schema v4 `bypassPackages` (validated, sorted, unique, at most 200), v3 → v4 migration, `updateBypassPackages`; tests in `app/src/test/java/com/kidsgarden/app/data/` (FR-038)
+- [X] T144 `CommunicationAppExclusions.apply(target, parentBypass)`; `KidsGardenVpnService` applies the list at every establish and rebuilds the tunnel in place on `ACTION_RECONFIGURE`; `VpnDullingController.reconfigure()`; `AppContainer` reconfigures when the list changes; launcher `<queries>` intent
+- [X] T145 `BypassAppsScreen.kt` (parent-only, checkboxes) and the Settings entry and route; no VPN-off control
+- [X] T146 [P] `DeactivateStopsVpnTest.kt` (Deactivate shuts the service and nothing restarts it; a running VPN rebuilds for a new list) and a parent-bypass case in `CommunicationAppExclusionsTest.kt`
+- [X] T147 [P] Instrumented: bypass screen and Parent options grace line in `MethodSettingsFlowTest.kt`; `bypassPackages` in the `StoragePrivacyTest.kt` allowlist
+- [ ] T148 Device check on API 35/36: PIN not asked again until lock or child start; a checked app unshaped while others stay dull; grace pause and resume across a lock, window end and reset; after Deactivate no Kids Garden VPN network or notification remains (SC-011, SC-012)
+- [X] T149 Fix (2026-10-27): the relay protected its outgoing TCP socket before the OS socket existed, so `protect` failed and every TCP connection through the tunnel was reset (only UDP/QUIC sites such as YouTube loaded). Bind before protect in `LocalSocksRelay.kt`; regression `RelayProtectTest.kt`. Earlier device results for TCP shaping (T050, T090) must be re-measured
+- [X] T150 Fix (2026-10-27): offer IPv6 in the tunnel only when the real network has it (`UnderlyingNetworkMonitor.hasIpv6`, `IpFamilies`), rebuild the tunnel when that changes; test `IpFamiliesTest.kt`
+
 ---
 
 ## Dependencies & Execution Order

@@ -8,7 +8,7 @@
 
 `StateMachine.reduce(state, event, time)` returns a new immutable state and typed effects. It imports no Android classes, UI, DataStore or VPN implementation. `SessionManager` serializes events and publishes StateFlow; all policy decisions belong to the reducer/pure DullModePolicy.
 
-Incoming events: ProcessStarted(savedActive), ScreenOn, EffectCapabilityChanged, MethodSwitchesChanged, ActivateRequested, DeactivateRequested(confirmed), UiOpened, ParentUiLeft, PinVerified, PinRejected, StartParentRequested, StartChildRequested(duration), ManualParentExit, ScreenOff, DeviceLocked, UserPresent, CallAggregateChanged, CallCapabilityChanged, DeadlineObserved, SettingsChanged, SettingsInvalid, SettingsWriteSucceeded/Failed, VpnCapabilityChanged, RebootObserved and PackageReplaced.
+Incoming events: ProcessStarted(savedActive), ScreenOn, EffectCapabilityChanged, MethodSwitchesChanged, ActivateRequested, DeactivateRequested(confirmed), UiOpened, PinVerified, PinRejected, StartParentRequested, StartChildRequested(duration), ManualParentExit, ScreenOff, DeviceLocked, UserPresent, CallAggregateChanged, CallCapabilityChanged, DeadlineObserved, SettingsChanged, SettingsInvalid, SettingsWriteSucceeded/Failed, VpnCapabilityChanged, RebootObserved and PackageReplaced.
 
 Do not pass raw PINs or Android Intent extras into the reducer. PIN verification returns only an opaque short-lived permission/generation. Call events contain minimal active/unknown state and timing, not identities or content.
 
@@ -37,12 +37,15 @@ Effects: ApplyEffectPolicy(policy, generation), PersistSettings (parent settings
 | Any grant, lock, screen, call, boundary, VPN or capability event while DEACTIVATED | Ignored; stays DEACTIVATED | No network policy; VPN stays stopped |
 | Ordinary UiOpened | Reconcile existing live state; no grant | PIN screen or setup; opening UI is not process restart |
 | UiOpened during PARENT_MODE, unlocked, no unused permission | Issue ParentAccess with a fresh one-use grant permission; mode unchanged | Parent actions without PIN; Normal unchanged |
+| UiOpened with ParentAccess held, no unused permission (2026-10-27) | Issue a fresh one-use grant permission; access and mode unchanged | Parent actions without PIN |
 | Valid PIN | ParentAccess only | No policy change |
 | StartParent + fresh grant permission + unlocked + valid setup/capability | Commit PARENT_MODE in memory; consume grant permission | Normal after generation/interactive/capability recheck |
 | StartChild(10–120, step 10) + same prerequisites | One new grant; clear all ParentAccess as part of commit | Normal; brief noninteractive confirmation; protected back stack cleared |
 | Invalid duration / stale permission / duplicate command | No new grant | Calm parent error, no extra duration |
-| ScreenOff or DeviceLocked | Parent mode/token revoked; child counts elapsed time unless validly call-paused | Dull intent for revoked parent; fixed package exclusions remain |
-| UserPresent in DULL, Unlock grace on, Active, setup complete, a dulling method works, rest time over (FR-037) | Start an in-memory unlock-grace grant (D = grace + fade, L = fade); save its start time | Normal, then the Soft Landing fade to DULL; no child-facing effect |
+| ScreenOff or DeviceLocked | Parent mode/token revoked; a running unlock grace banks its remainder in the grace window and returns to DULL; child counts elapsed time unless validly call-paused | Dull intent for revoked parent; fixed package exclusions remain |
+| UserPresent in DULL, Unlock grace on, Active, setup complete, a dulling method works (FR-037, 2026-10-27) | No open window: open one fixed for the rest time with a full budget and save its start. Budget left: continue it as an in-memory unlock-grace grant (D = grace + fade, L = fade) at the same point. No budget: stay DULL |
+| Grace window end (boundary) | Unused grace lost; a grace before its fade jumps to the fade start, one fading finishes; next unlock opens a new window | Fade, then Dull |
+| Activate, Deactivate or StartParent commits | Grace window cleared; PersistUnlockGraceStart(null) | No change to network intent beyond the commit itself | Normal, then the Soft Landing fade to DULL; no child-facing effect |
 | UserPresent | Revoke any surviving parent grant defensively; evaluate child accounting | DULL stays DULL; child/ramp continues only when valid |
 | Telephony source becomes ACTIVE | Preserve parent/DULL; freeze unexpired child C and ramp progress | Retain current policy for non-excluded traffic; no confirmation |
 | Additional/duplicate active indication | Existing union pause, no second credit | Current policy remains |
@@ -54,9 +57,9 @@ Effects: ApplyEffectPolicy(policy, generation), PersistSettings (parent settings
 | Call starts at zero remaining play | Already DULL; no revival or pause credit | DULL with fixed package exclusions |
 | Wall time/timezone changes | No extra play; elapsed accounting remains | No new authorization |
 | Invalid elapsed state or accounting | DULL, clear grant/tokens | Safe capability-dependent intent; parent-only current error |
-| ManualParentExit | DULL without additional PIN | DULL with fixed package exclusions |
-| PIN change | Verify current PIN, persist new credential; revoke every token/grant | DULL |
-| VPN revoke/forwarding failure | DULL; no stale grant restored by repair | Unshaped/bypass or stopped VPN, parent SETUP_REQUIRED |
+| ManualParentExit | DULL without additional PIN; ParentAccess kept with a fresh permission (2026-10-27) | DULL with fixed package exclusions |
+| PIN change | Verify current PIN, persist new credential; end every grant; the parent's access is kept (2026-10-27) | DULL |
+| VPN revoke/forwarding failure | DULL; no stale grant restored by repair; ParentAccess kept | Unshaped/bypass or stopped VPN, parent SETUP_REQUIRED |
 | Call permission loss/adapter failure/unsupported observation | End affected source eligibility; if no active source remains, close pause and continue countdown | Keep current authorization/VPN health; exact parent-only limitation |
 | Ringing only, WhatsApp or other app call, or undetectable call | No pause; countdown and expiry continue | No policy override, no implementation blocker |
 | Ordinary offline/reconnect with healthy capability | No reset/pause other than independently active call | Recompute current policy, not stored previous policy |

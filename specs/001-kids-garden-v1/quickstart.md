@@ -2,12 +2,12 @@
 
 ## Current repository status
 
-Updated 2026-10-11. The app and its tests are written for every user story (86 of 94 tasks). The first local build on Windows passes:
+Updated 2026-10-27. The app and its tests cover every user story plus the owner changes through the 2026-10-27 clarification (parent access, apps that skip Kids Garden, grace window). Device qualification tasks remain open. The local build on Windows passes:
 
 | Check | Result |
 | --- | --- |
-| `:domain:test` | 117 of 117 pass |
-| `:app:testDebugUnitTest` | 75 of 75 pass |
+| `:domain:test` | 180 of 180 pass |
+| `:app:testDebugUnitTest` | 122 of 122 pass |
 | `:app:lintDebug` | 0 errors |
 | `:app:compileDebugAndroidTestKotlin` | compiles |
 | `:app:assembleDebug` | builds; `libkg-tunnel.so` packaged for arm64-v8a and x86_64, LOAD segments 16 KB aligned |
@@ -96,9 +96,14 @@ Use [data-model.md](data-model.md) and [state-machine contract](contracts/state-
 | Clock/race/error | Fake elapsed/wall shifts, expired event races, duplicate writes, invalid timestamps | No unauthorized access; unclear state becomes DULL |
 | Persistence | Serializer fixtures, missing/corrupt/future schema, I/O failure | Safe defaults or explicit unavailable storage; never false save success |
 | Process/reboot/update | Restart owning process, update, or reboot during any grant/pause | New process starts at DULL with no session (DEACTIVATED if the parent deactivated); valid settings persist; settings file contains no mode/session fields |
-| Deactivate | In Settings, Deactivate during DULL, Parent Mode, a child session and a call pause; cancel once, then confirm | Cancel changes nothing; confirm ends any grant silently, stops the VPN, dashboard shows Deactivated, phone not dulled |
+| Deactivate | On Parent options, turn the switch off during DULL, Parent Mode, a child session and a call pause | No pop-up; any grant ends silently; the VPN fully stops (no VPN key icon, no Kids Garden notification, no VPN network in `adb shell dumpsys connectivity`); red "off" card; phone not dulled |
 | Deactivated persists | While Deactivated: lock/unlock, call, reboot, update | Stays Deactivated; VPN stays off; no DULL moment |
-| Activate | Enter PIN, choose Activate Kids Garden; repeat with VPN consent revoked | DULL with no grant; with revoked consent, SETUP_REQUIRED |
+| Activate | Turn the switch back on (no PIN asked); repeat with VPN consent revoked | DULL with no grant; grace window reset; with revoked consent, SETUP_REQUIRED |
+| PIN once (2026-10-27) | Open the app with the PIN; go home and reopen; exit Parent Mode; change the PIN; then lock and reopen; then give the phone to a child and reopen | No PIN asked until the lock; PIN asked after the lock and after the child start |
+| Apps that skip Kids Garden | Settings → Choose apps that skip Kids Garden; check one app; compare it with an unchecked app in DULL; uncheck it during a child session | Checked app at normal speed, unchecked app dull; change applies within a second and the child session keeps running; no VPN-off control exists |
+| Unlock grace window | Defaults (5 min grace, 2 min fade, 1 h window). Unlock, use 2 min, lock 10 min, unlock; use the rest; unlock again within the hour; wait for the hour to pass and unlock | 3 min grace left after the lock; then fade and dull; later unlocks in the hour stay dull; Parent options shows "Next grace in …"; after the hour a fresh 5 min grace |
+| Grace reset | During a window, start Parent Mode and lock; separately turn the switch off and on | The next unlock gets a fresh grace in both cases |
+| Grace display | Open the app during a grace and after it | "Unlock grace left: m:ss" or "No unlock grace left. Next grace in m:ss" on Parent options only; nothing in the status bar or notifications |
 | Compatibility check | Run setup with another VPN active, in a work profile with VPN blocked, and on a clean phone | Exact reason and remedy for each failure; “This phone can be dulled” on the clean phone; no outbound app traffic during the check |
 | Background stop | Force the OEM battery saver to kill the app, then reopen | Dashboard shows the background-stop message and battery settings button; no exemption requested automatically |
 | Effect cycle | Enable all three effects, default timings, DULL with screen on | Each rises over 2 minutes, rests 1 minute, repeats; touches work; no text appears |

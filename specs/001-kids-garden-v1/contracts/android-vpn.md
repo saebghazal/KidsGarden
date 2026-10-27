@@ -29,7 +29,8 @@ Android components translate platform observations into domain events. They do n
 | RECEIVE_BOOT_COMPLETED | Reconcile DULL on permitted post-boot execution (or stay DEACTIVATED and skip VPN start when saved `active = false`); no pre-unlock protection claim |
 | BIND_VPN_SERVICE | Service declaration restricted to Android; not a runtime parent permission |
 | READ_PHONE_STATE | Parent explanation screen first, then runtime request for per-subscription telephony call state. Denial/revocation continues countdown and shows only the parent call limitation. |
-| `<queries>` | `<package android:name="com.whatsapp"/>` plus intent queries for `ACTION_DIAL` and `ACTION_SENDTO` with `smsto:` so exclusion packages are visible; no QUERY_ALL_PACKAGES |
+| `<queries>` | `<package android:name="com.whatsapp"/>` plus intent queries for `ACTION_DIAL` and `ACTION_SENDTO` with `smsto:` so exclusion packages are visible, and a `MAIN`/`LAUNCHER` intent query so the parent screen for apps that skip Kids Garden (FR-038) can list launcher apps while it is open; no QUERY_ALL_PACKAGES |
+| USER_PRESENT receiver | Runtime-registered and exported, because some phones (Samsung) send it from System UI rather than the system process; it is a protected broadcast, so no app can fake an unlock (T135) |
 | Activity launch | Launcher exported as needed; no externally trusted grant extras |
 | Boot/update receiver | Manifest system-action receiver with minimal protected filters and bounded work |
 | Screen/user-present receiver | Runtime registration for protected system actions; registration flags chosen/tested for actual system sender |

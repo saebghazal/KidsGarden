@@ -13,7 +13,7 @@ Two independent concepts:
 
 Only a detectable active mobile/Telecom call pauses child/ramp accounting. Fixed communication-app VPN exclusions are independent of detection and never pause play time. DULL remains active on non-excluded traffic; missing call detection continues countdown without a global bypass.
 
-## Persisted SettingsDocument v3
+## Persisted SettingsDocument v4
 
 Stored as UTF-8 JSON at an app-private no-backup location, initially `kidsgarden-settings.json`. Max serialized size: 64 KiB. No directory of historical versions, settings exports, backup files, logs, or traffic files. DataStore's internal atomic-write mechanics do not authorize product history.
 
@@ -26,7 +26,8 @@ Stored as UTF-8 JSON at an app-private no-backup location, initially `kidsgarden
 | vpnDullingEnabled | Boolean / false | The Network dulling switch (“Network dulling” = VPN dulling) (set true when setup completes with a passing check); parent preference, not live consent or running-service proof |
 | screenEffects | ScreenEffects | Grey screen, lower media volume, lower brightness switches and cycle timings (FR-034–036) |
 | unlockGrace | UnlockGraceSettings | Unlock grace switch and times (FR-037) |
-| lastUnlockGraceEpochMillis | Long? / null | Start of the last unlock grace (epoch); one overwritten value so a restart cannot reset the rest time; never a history |
+| lastUnlockGraceEpochMillis | Long? / null | Start of the current grace window (epoch); one overwritten value so a restart cannot open a new window early; cleared by Activate, Deactivate and Parent Mode; never a history |
+| bypassPackages | List<String> / [] | Apps the parent lets skip Kids Garden (FR-038): valid package names, sorted, unique, at most 200; never Kids Garden itself at use time |
 | brightnessRestore | BrightnessRestore? / null | The parent's brightness level and auto setting saved before the brightness effect first lowers it; cleared after restore |
 | vpnDullingConfiguration | ProfileConfiguration | Canonical profile map, no redundant top-level cap values |
 | softLandingDurationSeconds | Int / 120 | Exactly 60 or 120 |
@@ -76,7 +77,7 @@ At least one of `vpnDullingEnabled` and the three effect switches must be true o
 | fadeSeconds | Int / 120 | 60, 120, 180, 240 or 300 |
 | restSeconds | Int / 3600 | 900, 1800, 3600, 7200, 10800 or 14400 |
 
-v2 → v3 migration adds `unlockGrace` with these defaults and `lastUnlockGraceEpochMillis = null`, and sets `schemaVersion = 3`. A v3 document missing either key, or an older one carrying them, is corruption.
+v2 → v3 migration adds `unlockGrace` with these defaults and `lastUnlockGraceEpochMillis = null`, and sets `schemaVersion = 3`. A v3 document missing either key, or an older one carrying them, is corruption. v3 → v4 migration adds `bypassPackages = []` and sets `schemaVersion = 4`; each document must carry exactly the keys of its version and earlier.
 
 ### BrightnessRestore
 
@@ -110,6 +111,7 @@ Written once per DULL period before the first brightness change and cleared afte
   "brightnessRestore": null,
   "unlockGrace": { "enabled": true, "graceSeconds": 300, "fadeSeconds": 120, "restSeconds": 3600 },
   "lastUnlockGraceEpochMillis": null,
+  "bypassPackages": [],
   "vpnDullingConfiguration": {
     "GENTLE": { "bandwidthKbps": 256, "addedRttLatencyMs": 300 },
     "MEDIUM": { "bandwidthKbps": 128, "addedRttLatencyMs": 600 },
@@ -129,7 +131,9 @@ This adapts the user's “similar to” example: MEDIUM is no longer paired with
 
 | Entity | Fields / lifecycle |
 | --- | --- |
-| ParentAccess | Volatile authenticated UI token, one-use grant permission, credential generation; cleared at child start, leaving parent UI, lock/off, PIN change, process restart |
+| ParentAccess | Volatile authenticated UI token, one-use grant permission, credential generation; cleared at child start, lock, screen off and process restart only (clarification 2026-10-27); leaving the app, ending Parent Mode, PIN change and the Active switch keep it and issue a fresh permission |
+| GraceWindow | Start epoch, end elapsed (fixed at the first unlock for the rest time), banked grace budget while no grace grant runs; cleared by Activate, Deactivate and Parent Mode; only the start epoch is persisted (FR-037) |
+| LaunchableApp | Package name and label of a launcher app, read only while the parent's "Apps that skip Kids Garden" screen is open; never stored except the chosen package names (FR-038) |
 | AuthorizationState | Authorization mode, generation, optional ChildGrant; starts at DULL on every process start, or DEACTIVATED when the valid saved `active` is false; DEACTIVATED holds no grant |
 | ChildGrant | Selected duration D, ramp length L, start epoch/elapsed anchors, captured profile snapshot, completed pause duration P, optional pause-start elapsed value; projected epoch deadlines for parent display |
 | CallState | ACTIVE / INACTIVE / UNAVAILABLE for the telephony source (one observation per active subscription, aggregated); monitor generation and minimal volatile observation timing; no caller identity, SIM identifier, or history |
@@ -169,7 +173,7 @@ The 30/5/25 example: D=30 minutes, elapsed since start=30 minutes, P=25 minutes,
 2. Parse the explicit schema header and validate bounds before complete DTO decode; reject unknown v1 keys (except the legacy keys above) and invalid enum values or field relationships.
 3. Corrupt/unsupported content invokes corruption replacement to safe defaults, with a transient parent repair reason. Do not preserve or log a raw broken document.
 4. Actual filesystem I/O failure produces StorageUnavailable for that settings operation; the parent sees a save failure and the previous value stays in effect. Authorization is unaffected because it is never written.
-5. Writes happen only for parent settings changes (Active/Deactivated, method switches and timings, PIN create/change, intensity, Soft Landing duration, VPN preference, setup flags) and for `brightnessRestore` (set once per DULL period, cleared on restore). Grants, pauses, expiry, and countdown never write.
+5. Writes happen only for parent settings changes (Active/Deactivated, method switches and timings, PIN create/change, intensity, Soft Landing duration, VPN preference, setup flags, unlock grace settings, apps that skip Kids Garden), for `brightnessRestore` (set once per DULL period, cleared on restore), and for `lastUnlockGraceEpochMillis` (set when a grace window opens, cleared by Activate, Deactivate and Parent Mode). Grants, pauses, expiry, and countdown never write.
 6. v1 → v2 migration adds `active = true`, default `screenEffects` and `brightnessRestore = null`, and sets `schemaVersion = 2`; a v2 document missing `active` is corruption (safe defaults, which are Active). For future versions, add deterministic idempotent version-to-version migrations and tests from every shipped version. Migrations must not recursively access DataStore.
 7. Keep settings in `noBackupFilesDir`, disable backup, exclude cloud and device transfer, and test transfer behavior.
 

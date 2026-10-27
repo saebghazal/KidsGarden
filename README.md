@@ -31,11 +31,12 @@ Kids Garden takes a different approach:
 | **Soft Landing** | The last minute or two of play, when the speed eases gradually back to dull. |
 | **Deactivated** | Kids Garden is switched off in Settings. The phone is never dulled until the parent turns it back on. |
 
-- Enter the PIN, then choose **Use phone as parent** or **Give phone to child**.
+- Enter the PIN, then choose **Use phone as parent** or **Give phone to child**. The PIN is asked again only after the phone locks or after the phone is given to the child, not each time you open the app.
 - Play time keeps counting while the phone is locked or offline. It **pauses during normal phone calls**, so a call doesn't eat the child's time.
-- The Phone app, WhatsApp and the default SMS app are **excluded from dulling**, so the child can always reach family.
+- The Phone app, WhatsApp and the default SMS app are **excluded from dulling**, so the child can always reach family. The parent can add more **apps that skip Kids Garden** (for example a school app) in Settings.
 - A restart, reboot or app update always returns the phone to **Dull**, unless the parent has switched Kids Garden off.
-- The parent can switch Kids Garden **off and on** in Settings with the PIN. While off, the phone works normally.
+- The parent can switch Kids Garden **off and on** with the switch at the top of Parent options. While off, the VPN is fully stopped and the phone works normally.
+- **Unlock grace** (on by default): after an unlock without the PIN, the phone works normally for a few minutes, then slowly gets dull. The grace pauses while the phone is locked, and the next fresh grace comes only after the rest time (default one hour), so the phone just seems "tired". Parent options shows how much grace is left or when the next one comes.
 - Besides slowing the internet, Dull Mode can **gently grey the screen, lower media volume and dim the brightness**. Each is switched on or off in Settings, fades in slowly, rests, and repeats. They also work on phones where the VPN can't run.
 - During setup Kids Garden **checks whether the phone can be dulled** and says why if it can't.
 
@@ -46,7 +47,7 @@ Kids Garden keeps everything on the device:
 - No accounts, servers, analytics or ads.
 - No logs, and no history of websites, apps, messages or calls.
 - The PIN is stored only as a salted, hardened hash, never as plain text.
-- Only the parent's settings are saved; modes and session times live in memory only.
+- Only the parent's settings are saved (including the start time of the current grace window and the apps the parent lets skip Kids Garden); modes and session times live in memory only.
 
 ## Honest limitations
 

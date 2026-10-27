@@ -1,7 +1,22 @@
 <!--
 Sync Impact Report
 ==================
-Version change: 3.1.1 → 4.0.0 (2026-10-25)
+Version change: 4.0.0 → 5.0.0 (2026-10-27)
+Bump rationale: MAJOR, Principle I rules redefined (owner clarification 2026-10-27).
+- Parent-interface access, once opened with the PIN, lasts until the phone locks, the screen
+  turns off, the phone is given to a child, or the process restarts. Leaving the app no longer
+  ends it, and each new grant no longer needs a second PIN entry while it lasts.
+- Deactivate needs parent-interface access and the parent's explicit switch action; the separate
+  confirmation dialog is gone (owner change 2026-10-19).
+- Unlock grace is a fixed window from the first unlock: the grace pauses while the phone is
+  locked, unused grace is lost when the window ends, and turning Kids Garden off and on or
+  starting Parent Mode resets it.
+- New: a parent-only list of apps that skip Kids Garden (they bypass the VPN entirely). No
+  VPN-off control is added. Launcher apps are listed only on that parent screen.
+Modified principles: I (access, Deactivate, Unlock grace, app bypass), III (what is stored).
+Other sections: V1 scope (in), review checklist.
+
+Previous amendment (3.1.1 → 4.0.0, 2026-10-25):
 Bump rationale: MAJOR, a principle rule is redefined. Principle I said an unlock alone never
 grants normal use. The owner added Unlock grace (spec FR-037): when the parent has it on, an
 unlock with no grant gives a short grace that fades into Dull Mode, at most once per rest
@@ -48,21 +63,34 @@ after the existing maintainer review requirement is satisfied.
 - Dull Mode MUST be the default while Kids Garden is Active. While Active, no valid Kids Garden
   authorization MUST mean Dull Mode. A normal device unlock, app launch, or successful PIN entry
   alone MUST NOT grant normal use, except the parent-configured Unlock grace below.
-- Unlock grace (v4.0.0): while Kids Garden is Active and the parent has it switched on, an
-  unlock from Dull Mode MAY give a short, parent-set grace that then fades gradually into Dull
-  Mode, at most once per parent-set rest period. It is never shown to the child as a message,
-  never applies during Parent Mode, play time or Deactivated, and never survives a restart as a
-  grant. Only its start time is saved, so a restart cannot reset the rest period.
+- Unlock grace (v4.0.0, revised v5.0.0): while Kids Garden is Active and the parent has it
+  switched on, the first unlock from Dull Mode opens a grace window of parent-set length. The
+  window holds one short, parent-set grace that fades gradually into Dull Mode. The grace runs
+  only while the phone is unlocked: locking pauses it and the next unlock in the window continues
+  it. Unused grace is lost when the window ends; the next unlock after that opens a new window.
+  Turning Kids Garden off and on, and starting Parent Mode, reset the window. The grace is never
+  shown to the child as a message, never applies during Parent Mode, play time or Deactivated,
+  and never survives a restart as a grant. Only the window start time is saved, so a restart
+  cannot open a new window early.
+- Apps that skip Kids Garden (v5.0.0): the parent MAY choose, behind the PIN, apps that bypass
+  the VPN entirely and are therefore never slowed. This is a parent setting, never a grant and
+  never set by the child. There is no control that turns the VPN off for everything; turning
+  Kids Garden off is the Deactivate switch, which MUST fully stop the VPN.
 - The parent MAY turn Kids Garden off with an Active/Deactivated switch. Deactivating MUST require
-  parent-interface access obtained with the Kids Garden PIN plus an explicit confirmation; it ends
-  every grant and stops dulling until the parent activates again. Activating MUST require the
-  PIN and returns the phone to Dull Mode without creating a grant. The choice is a saved parent
+  parent-interface access obtained with the Kids Garden PIN and the parent's explicit switch
+  action; it ends every grant, fully stops the VPN and stops dulling until the parent activates
+  again. Activating MUST require parent-interface access obtained with the PIN and returns the
+  phone to Dull Mode without creating a grant. The choice is a saved parent
   setting and persists across restart, update, and reboot. Nothing other than an authenticated
   parent action MAY deactivate Kids Garden: missing, corrupt, or unmigratable settings, errors,
   restarts, and child actions MUST resolve to Active and Dull Mode.
 - Enjoyable use MUST be allowed only through one of two explicit Kids Garden authorizations:
   untimed Parent Mode for the parent or a timed Child Play Session for the child. Each new grant
-  MUST require the Kids Garden PIN followed by the corresponding explicit parent action.
+  MUST require parent-interface access obtained with the Kids Garden PIN, followed by the
+  corresponding explicit parent action.
+- Parent-interface access (v5.0.0) lasts from a correct PIN entry until the phone locks, the
+  screen turns off, the parent gives the phone to a child, or the app process restarts. Leaving
+  and reopening the app in between MUST NOT ask for the PIN again; there is no idle timeout.
 - Parent Mode MUST begin only after the parent enters the Kids Garden PIN and chooses
   “Use phone as parent.” It MUST provide normal or near-normal phone use with no time limit.
 - Parent Mode MUST end when the phone locks, the screen turns off, the parent exits, app state
@@ -71,7 +99,8 @@ after the existing maintainer review requirement is satisfied.
   starts a new authorization. Unlock alone MUST NOT restore Parent Mode.
 - A Child Play Session MUST begin only after the parent enters the Kids Garden PIN, chooses
   “Give phone to child,” and selects a limited duration. The session MUST have a timer.
-- Lock/unlock MUST NOT reset, pause, extend, or bypass the child timer. A scoped detectable-call
+- Lock/unlock MUST NOT reset, pause, extend, or bypass the timer of a parent-given Child Play
+  Session (Unlock grace, which is not a parent grant, follows its own rule above). A scoped detectable-call
   pause is the only automatic pause: normal mobile/Telecom calls where Android APIs permit pause
   the timer only while a supported active call is detectable. WhatsApp and other third-party app
   calls, and unsupported or undetectable calls, MUST leave countdown running. A call pause MUST preserve the
@@ -126,8 +155,9 @@ a dull phone that quietly stays dull avoids all three.
   inspect application-layer payloads, and it MUST NOT persist any record of traffic, destinations,
   or apps used.
 - V1 persists only (a) parent settings and (b) the parent's previous screen brightness while a
-  brightness effect is applied, so it can be restored, and (c) the start time of the last Unlock
-  grace (v4.0.0), a single overwritten timestamp so a restart cannot reset the rest period. Session
+  brightness effect is applied, so it can be restored, and (c) the start time of the current Unlock
+  grace window (v4.0.0, revised v5.0.0), a single overwritten timestamp so a restart cannot open
+  a new window early; it is cleared when the window is reset. Session
   and authorization state are kept in memory only. Activity logs, history, and usage reports are prohibited in V1.
 - V1 MUST NOT create logs in debug or release builds, including Logcat diagnostics, crash logs,
   PIN-attempt logs, network logs, call logs, or activity logs. Debug builds MUST NOT weaken this
@@ -180,7 +210,7 @@ Overpromising protection misleads parents.
 
 - No backend, remote server, cloud sync, or account system. Authentication is the local Parent PIN
   only.
-- No database. Settings (including the brightness restore value and the last Unlock grace start) are stored with Jetpack DataStore using a JSON serializer
+- No database. Settings (including the brightness restore value, the current Unlock grace window start and the apps that skip Kids Garden) are stored with Jetpack DataStore using a JSON serializer
   (kotlinx.serialization), accessed only through a settings repository in the data layer.
 - No analytics, crash-reporting SDKs that transmit data, advertising SDKs, or tracking of any kind.
 - The app is entirely free: no in-app purchases, subscriptions, or ads.
@@ -229,8 +259,10 @@ the device's battery.
   duration, with scoped detectable-call pauses and no lock/unlock timer bypass.
 - Dull Mode without valid authorization while Active; Soft Landing near normal child expiry, then
   Dull Mode.
-- PIN-protected Active/Deactivated switch; Deactivated stops dulling and persists until the
-  parent activates again.
+- PIN-protected Active/Deactivated switch; Deactivated stops dulling and the VPN and persists
+  until the parent activates again.
+- Parent-configured Unlock grace with a fixed window (v4.0.0, revised v5.0.0).
+- Parent-only list of apps that skip Kids Garden by bypassing the VPN (v5.0.0).
 - Local VPN-based throttling of internet responsiveness and bandwidth.
 - Optional, gradual screen and sound dulling (grey tint, lower media volume, lower brightness)
   configured by the parent, usable with or without the VPN.
@@ -289,4 +321,4 @@ the device's battery.
 - Moving a V2 capability (for example, Device Owner mode or logs) into scope requires a constitution
   amendment first.
 
-**Version**: 4.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-25
+**Version**: 5.0.0 | **Ratified**: 2026-10-09 | **Last Amended**: 2026-10-27

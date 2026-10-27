@@ -12,6 +12,10 @@
 
 **Update 2026-10-18 (analysis fixes)**: `/speckit-analyze` fixes applied. During a break the media volume cap is lifted (Kids Garden never raises volume itself) and brightness eases back to the saved level, cleared only when effects stop; constitution v3.1.1 (persistence wording); SC-010 added for screen and sound effects; “Check this phone” also offered on the dashboard when the phone is unprotected. Phase numbers: plan Phase 14 = tasks Phase 10, plan Phase 15 = tasks Phase 11. Terms: “Network dulling” = VPN dulling = `vpnDullingEnabled`.
 
+**Update 2026-10-25**: Unlock grace (FR-037, constitution v4.0.0): an unlock without the PIN gives a short, parent-set grace that fades into DULL, then a rest period. Settings schema v3. Owner UI changes the same day: up/down arrows for every time setting; the app opens as a card over the dimmed home screen. Design below; tasks Phase 12.
+
+**Update 2026-10-27**: Owner clarification (spec Clarifications 2026-10-27, constitution v5.0.0): (1) parent-interface access lasts until lock, screen off, child start or restart; (2) a parent-only list of apps that skip Kids Garden by bypassing the VPN, settings schema v4, and a check that Deactivate fully stops the VPN; (3) Activate and Parent Mode reset the grace window, and Parent options shows grace left or time to the next grace; (4) the grace window is fixed from the first unlock, the grace pauses while locked, and unused grace is lost when the window ends. Design below; tasks Phase 13.
+
 ## Summary
 
 Build a free, local-only Android 15/16 app using Kotlin, Compose, typed DataStore JSON for parent settings, secure parent PIN verification, and one pure domain state machine that holds authorization in memory. DULL is the default authorization; Parent Mode ends on screen off/lock; child grants last 10–120 minutes of play time (10-minute steps) with a 1/2-minute Soft Landing. Only detectable active mobile/Telecom calls freeze child play/ramp time; lock alone never pauses play. Starting child play immediately clears access to parent controls. A PIN-protected Active/Deactivated switch lets the parent turn Kids Garden off: Deactivated ends every grant, stops the VPN and never enters DULL until the parent activates again; the choice is saved and survives restart and reboot.
@@ -49,6 +53,9 @@ Evaluated against constitution v2.0.0, before research and again after Phase 1 d
 | Principle / gate | Pre-research disposition | Post-design result |
 | --- | --- | --- |
 | I — Unauthorized means DULL | One reducer; memory-only authorization | PASS; every process start is DULL while Active (DEACTIVATED only from a valid saved Deactivated flag), call pause/exclusion is not a grant |
+| I — Parent access and grants (v5.0.0) | PIN opens the parent interface until lock, screen off, child start or restart; each grant still needs an explicit action and a one-use permission | PASS; no grant without the PIN-opened interface, unlock never restores Parent Mode |
+| I — Unlock grace (v4.0.0, revised v5.0.0) | Parent-enabled, windowed, pauses while locked, reset by Activate and Parent Mode | PASS; grace is an in-memory grant, only the window start is stored, no child-facing message |
+| I — Apps that skip Kids Garden (v5.0.0) | Parent-only bypass list; no VPN-off control; Deactivate fully stops the VPN | PASS; list behind PIN, stored as parent setting, launcher-intent visibility only |
 | I — Active/Deactivated switch (v3.0.0) | Deactivate needs parent-interface access and the explicit switch action; Activate needs parent-interface access obtained with the PIN | PASS; only an authenticated parent action writes Deactivated; corrupt/missing/unmigratable settings default to Active |
 | I — Explicit authorization | PIN plus explicit action for Parent Mode or Child Play Session | PASS; lock/screen-off revokes Parent Mode |
 | I — Scoped call pause / no loophole | Only per-subscription telephony state pauses | PASS; WhatsApp is "unsupported" under I (countdown continues), game voice chat cannot pause |
@@ -162,7 +169,7 @@ app/
 
 `StateMachine.reduce` is the only transition function: validated state + event + clock snapshot → next state + effects. `SessionManager` owns the serialized event queue, StateFlow and effect execution; it does not duplicate transition logic. `DullModePolicy`/`SoftLandingPolicy` compute intent, and `VpnDullingController` applies it only when capability allows. See [state contract](contracts/state-machine.md).
 
-A correct PIN yields a volatile parent-interface token, not a phone grant. Settings require that token. New phone grants require a fresh PIN-derived one-use grant permission plus explicit action. Child start commits the session and clears both tokens before confirmation.
+A correct PIN yields a volatile parent-interface token, not a phone grant. Settings require that token. New phone grants require a PIN-derived one-use grant permission plus explicit action; while parent-interface access lasts (until lock, screen off, child start or restart), a used permission is re-issued (FR-004, 2026-10-27). Child start commits the session and clears both tokens before confirmation.
 
 Authorization is memory-only, so a grant commits in one reducer step: verify the grant permission, interactive/unlocked state and live capability, bump the generation, publish Normal. There is no grant write or pending-grant state. Revocation immediately invalidates the generation; the shaping path checks the current policy/generation/deadline before forwarding under a prior Normal grant. A new process always starts at DULL.
 
@@ -189,6 +196,18 @@ The reducer outputs an `EffectPolicy` (enabled effects, captured intensity) only
 - `BrightnessDimmer`: `Settings.System.SCREEN_BRIGHTNESS` and `SCREEN_BRIGHTNESS_MODE` via `WRITE_SETTINGS` (`Settings.System.canWrite`). Before the first change in a DULL period it saves the parent's level and auto setting to `SettingsDocument.brightnessRestore`; on effect end it restores them and clears the field. At process start a non-null `brightnessRestore` is restored first.
 
 Missing access disables only that adapter and is reported in `ProtectionStatus.effects`. Dulling capability = VPN running OR any enabled effect working; SETUP_REQUIRED only when neither. The four method switches live in settings; the repository rejects a write that would turn all four off.
+
+### Parent-interface access (FR-004, 2026-10-27)
+
+`ParentAccess` is cleared only by ScreenOff, DeviceLocked (and an `InteractivityObserved(false)` sample), a child grant, or a process restart. The former `ParentUiLeft` event is removed: `MainActivity.onStop` and the navigation listener no longer dispatch it. In-app endings (Exit Parent Mode, PIN change, VPN loss) end grants through `expireToDull`, which keeps the access and issues a fresh one-use grant permission (`refreshPermission`); `UiOpened` re-arms a used permission. The PIN route forwards to Parent options while access is held.
+
+### Unlock grace (FR-037)
+
+The grace is an in-memory `ChildGrant` with `unlockGrace = true` (D = grace + fade, L = fade), so the Soft Landing ramp, call pause and expiry rules apply unchanged. A `GraceWindow` (start epoch, end elapsed, banked budget) lives in `AuthorizationState`. The first `UserPresent` in DULL opens the window and emits `PersistUnlockGraceStart(start)`; later unlocks in the window continue the banked budget by starting the grant shifted by the used part, which keeps the fade stage. ScreenOff/DeviceLocked bank `remainingMillis` and return to DULL. Grant boundaries are capped at the window end; at the window end a grace still before its fade jumps to the fade start and one already fading finishes. Activate, Deactivate and Parent Mode set the window to null and persist `null`. A new process derives an open window from the saved start with its budget counted as used (`UnlockGrace.windowFromSaved`); `graceWindowKnown` stops a late settings echo from reviving a cleared window. `ParentFacingSnapshot.graceLeftMillis` and `nextGraceInMillis` drive the Parent options line, inside the app only.
+
+### Apps that skip Kids Garden (FR-038)
+
+`SettingsDocument.bypassPackages` (schema v4, validated package names, at most 200, sorted and unique) is read by `KidsGardenVpnService` at every `establish()` and passed to `CommunicationAppExclusions.apply(target, parentBypass)`, which adds them to the fixed exclusions; Kids Garden itself is always removed. A changed list triggers `VpnDullingController.reconfigure()` → `ACTION_RECONFIGURE` → a new `establish()` that replaces the running interface, restarts forwarding on the new descriptor and closes the old one, without reporting lost capability, so grants continue. `BypassAppsScreen` lists launcher apps through a `<queries>` launcher intent only while it is open. There is no VPN-off control; Deactivate's `StopVpn` shuts the service (tunnel, forwarding, foreground notification) and `startAllowed` keeps it off.
 
 ### Clocks and call preservation
 
@@ -256,6 +275,8 @@ The 13 milestones remain; `tasks.md` is the executable checklist.
 | 11 — Explanations | Limitations, privacy, VPN, notification and phone-state explanations | Accurate limited status; exact call limitation text; no uninstall-proof, total-control or universal-call claims |
 | 12 — Verification | Unit/instrumentation/manual/performance/battery matrix | Every applicable spec criterion mapped and passed; no substituted mocks for device proof |
 | 13 — Release | Dependency/privacy/signing audit; private APK first | All gates green; stable signing key kept outside repo; no store publication implied |
+| 17 — Parent access, app bypass, grace window (2026-10-27) | Remove `ParentUiLeft`; `expireToDull`/`refreshPermission`; `GraceWindow` with lock pause, window end and reset; `PersistUnlockGraceStart(null)`; schema v4 `bypassPackages` with migration; exclusions + in-place tunnel rebuild; `BypassAppsScreen`; Parent options grace line | `UnlockGraceTest`, access tests in `ParentModeTest`/`SettingsEffectsTest`, `DeactivateStopsVpnTest`, exclusion and schema tests; device check of bypass, grace and full VPN stop |
+| 16 — Unlock grace (FR-037, 2026-10-25) | `UnlockGrace`, grace grant from `UserPresent`, schema v3, Settings section, countdown | `UnlockGraceTest`, migration tests; device check |
 | 15 — Compatibility, guidance, screen and sound dulling (FR-032–036, added 2026-10-18) | `checkCompatibility`, `BackgroundStopped` status and guidance button; `EffectCycle`, `EffectPolicy`, `ScreenEffectsController` with overlay, volume and brightness adapters; access explanation screens; four method switches; capability = VPN or any effect | Compatibility pass and each failure reason on API 35/36 with no outbound app traffic; `EffectCycleTest` timings; effects stop on screen off/grant/call/Deactivate; brightness restored after process death; touches pass through; call/alarm/ring volume unchanged; idle battery unchanged with screen off |
 | 14 — Active/Deactivated switch (FR-031, added 2026-10-15) | `Mode.DEACTIVATED`, Activate/Deactivate events and effects; `SettingsDocument` v2 + v1→v2 migration; start-up and boot handling; Settings switch, confirmation, dashboard and parent-actions changes; VPN/FGS stop | Reducer tests for deactivate from every state and ignored events while Deactivated; migration and corruption → Active tests; failed-write test; device check that the VPN stops and stays off across reboot, and Activate returns to DULL |
 
