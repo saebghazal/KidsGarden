@@ -71,6 +71,8 @@ Version 1 is in active development.
 
 ## Build
 
+**Step-by-step guide:** see **[INSTALL.md](INSTALL.md)**. It covers setting up your development environment, building, installing on your own Android phone or tablet (from Android Studio or as a ready-made APK), first-time setup and troubleshooting.
+
 **Requirements:** Android Studio with **JDK 21** as the Gradle JDK, Android SDK 36, and NDK `28.2.13676358`.
 
 ```bash
